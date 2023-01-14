@@ -106,7 +106,7 @@ class nodemangment:
 
             node = node.next 
 
-    
+
 
         
 
