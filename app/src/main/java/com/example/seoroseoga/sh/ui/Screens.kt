@@ -1,6 +1,10 @@
 ﻿package com.example.seoroseoga.sh.ui
 
+import android.annotation.SuppressLint
+import android.content.Intent
 import android.net.Uri
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -58,19 +62,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import com.example.seoroseoga.R
 import com.example.seoroseoga.sh.data.BookRecognitionModule
 import com.example.seoroseoga.sh.data.GeminiChatModule
+import com.example.seoroseoga.sh.data.KakaoLocalModule
 import com.example.seoroseoga.sh.data.MeetingCreateInput
 import com.example.seoroseoga.sh.data.MeetingRepository
 import com.example.seoroseoga.sh.model.AiChatMessage
 import com.example.seoroseoga.sh.model.AIGuide
 import com.example.seoroseoga.sh.model.BookInfo
+import com.example.seoroseoga.sh.model.KakaoPlace
 import com.example.seoroseoga.sh.model.Meeting
 import com.example.seoroseoga.sh.model.MeetingMessage
 import com.example.seoroseoga.sh.model.MyBook
@@ -78,6 +86,7 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.net.URLEncoder
 
 private val Olive = Color(0xFF7B8A63)
 private val Pale = Color(0xFFF4F4F0)
@@ -132,6 +141,7 @@ fun HomeScreen(
 @Composable
 fun MeetRegScreen(
     recognitionModule: BookRecognitionModule,
+    kakaoLocalModule: KakaoLocalModule,
     onBackClick: () -> Unit,
     onCreateMeeting: (MeetingCreateInput, () -> Unit, (String) -> Unit) -> Unit
 ) {
@@ -153,29 +163,19 @@ fun MeetRegScreen(
     var description by remember { mutableStateOf("") }
     var hostName by remember { mutableStateOf("") }
     var place by remember { mutableStateOf("") }
+    var placeAddress by remember { mutableStateOf("") }
+    var placeLatitude by remember { mutableStateOf<Double?>(null) }
+    var placeLongitude by remember { mutableStateOf<Double?>(null) }
+    var placeResults by remember { mutableStateOf<List<KakaoPlace>>(emptyList()) }
+    var selectedPlace by remember { mutableStateOf<KakaoPlace?>(null) }
     var date by remember { mutableStateOf("") }
     var time by remember { mutableStateOf("") }
     var fee by remember { mutableStateOf("") }
     var maxParticipants by remember { mutableStateOf("4") }
-    var showPlaceCandidates by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     val datePickerState = rememberDatePickerState()
     val timePickerState = rememberTimePickerState(is24Hour = true)
-    val placeCandidates = remember {
-        listOf(
-            "부산대학교 중앙도서관 1층 라운지",
-            "부산대학교 새벽벌도서관 스터디룸",
-            "부산대학교 인문관 201호",
-            "부산대학교 사회관 105호",
-            "부산대학교 경영관 세미나실",
-            "부산대학교 학생회관 로비",
-            "부산대 앞 카페거리",
-            "부산대역 3번 출구 근처",
-            "금정회관 스터디 공간",
-            "장전동 북카페"
-        )
-    }
 
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
@@ -292,21 +292,60 @@ fun MeetRegScreen(
         item { InputField("모임 제목", title) { title = it } }
         item { InputField("모임 설명", description) { description = it } }
         item { InputField("개설자 이름", hostName) { hostName = it } }
-        item { InputField("장소", place) { place = it } }
+        item {
+            InputField("장소 검색", place) {
+                place = it
+                selectedPlace = null
+                placeAddress = ""
+                placeLatitude = null
+                placeLongitude = null
+            }
+        }
         item {
             Button(
-                onClick = { showPlaceCandidates = !showPlaceCandidates },
+                onClick = {
+                    loading = true
+                    error = null
+                    scope.launch {
+                        runCatching { kakaoLocalModule.searchPlaces(place) }
+                            .onSuccess { results ->
+                                placeResults = results
+                                if (results.isEmpty()) error = "검색된 장소가 없습니다."
+                            }
+                            .onFailure { throwable ->
+                                error = throwable.message ?: "카카오 장소 검색 실패"
+                            }
+                        loading = false
+                    }
+                },
                 colors = mutedButtonColors(),
                 shape = RoundedCornerShape(8.dp)
-            ) { Text(if (showPlaceCandidates) "장소 후보 접기" else "장소 후보 보기") }
+            ) { Text("카카오맵 장소 검색") }
         }
-        if (showPlaceCandidates) {
-            item { Text("부산대 장소 후보", fontWeight = FontWeight.Bold, color = Ink) }
-            items(placeCandidates) { candidate ->
-                OcrCandidateChip(candidate) {
-                    place = candidate
-                    showPlaceCandidates = false
+        if (placeResults.isNotEmpty()) {
+            item { Text("카카오 장소 검색 결과", fontWeight = FontWeight.Bold, color = Ink) }
+            items(placeResults) { candidate ->
+                KakaoPlaceCard(candidate) {
+                    place = candidate.name
+                    placeAddress = candidate.address
+                    placeLatitude = candidate.latitude
+                    placeLongitude = candidate.longitude
+                    selectedPlace = candidate
+                    placeResults = emptyList()
                 }
+            }
+        }
+        selectedPlace?.let { placeInfo ->
+            item {
+                Text("선택한 장소", fontWeight = FontWeight.Bold, color = Ink)
+                KakaoPlaceCard(placeInfo, onClick = {})
+                KakaoMapPreview(
+                    placeName = placeInfo.name,
+                    address = placeInfo.address,
+                    latitude = placeInfo.latitude,
+                    longitude = placeInfo.longitude,
+                    modifier = Modifier.fillMaxWidth().height(160.dp)
+                )
             }
         }
         item { PickerField("날짜", date.ifBlank { "날짜 선택" }) { showDatePicker = true } }
@@ -325,6 +364,9 @@ fun MeetRegScreen(
                             description = description,
                             hostName = hostName,
                             place = place,
+                            placeAddress = placeAddress,
+                            placeLatitude = placeLatitude,
+                            placeLongitude = placeLongitude,
                             meetingDate = date,
                             meetingTime = time,
                             fee = fee.toIntOrNull() ?: 0,
@@ -555,12 +597,21 @@ fun AiChatScreen(
 @Composable
 private fun MeetingCard(meeting: Meeting, onClick: (Meeting) -> Unit) {
     Column(
-        modifier = Modifier.width(210.dp).clip(RoundedCornerShape(8.dp)).background(Pale).clickable { onClick(meeting) }.padding(14.dp),
+        modifier = Modifier.width(230.dp).clip(RoundedCornerShape(8.dp)).background(Pale).clickable { onClick(meeting) }.padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Text(meeting.title, fontWeight = FontWeight.Bold, color = Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(meeting.bookTitle.ifBlank { "책 정보 입력 대기" }, color = Olive, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text("${meeting.place} · ${meeting.meetingDate} ${meeting.meetingTime}", color = Color(0xFF666666), fontSize = 12.sp, maxLines = 2)
+        if (meeting.placeLatitude != null && meeting.placeLongitude != null) {
+            KakaoMapPreview(
+                placeName = meeting.place,
+                address = meeting.placeAddress,
+                latitude = meeting.placeLatitude,
+                longitude = meeting.placeLongitude,
+                modifier = Modifier.fillMaxWidth().height(92.dp)
+            )
+        }
         Text("${meeting.currentParticipantsCount}/${meeting.maxParticipants}명", color = Color(0xFF555555), fontSize = 12.sp)
     }
 }
@@ -616,10 +667,84 @@ private fun CandidateCard(candidate: BookInfo, onClick: () -> Unit) {
 }
 
 @Composable
+private fun KakaoPlaceCard(place: KakaoPlace, onClick: () -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Pale).clickable(onClick = onClick).padding(12.dp)) {
+        Text(place.name, fontWeight = FontWeight.Bold, color = Ink)
+        Text(place.address.ifBlank { "주소 정보 없음" }, color = Color(0xFF666666), fontSize = 12.sp)
+        if (place.phone.isNotBlank()) Text(place.phone, color = Color(0xFF777777), fontSize = 12.sp)
+    }
+}
+
+@SuppressLint("SetJavaScriptEnabled")
+@Composable
+private fun KakaoMapPreview(
+    placeName: String,
+    address: String,
+    latitude: Double,
+    longitude: Double,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val mapUrl = remember(placeName, latitude, longitude) {
+        kakaoMapLinkUrl(placeName.ifBlank { "선택한 장소" }, latitude, longitude)
+    }
+
+    Box(modifier = modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xFFE9ECE6))) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { viewContext ->
+                WebView(viewContext).apply {
+                    webViewClient = WebViewClient()
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    settings.loadWithOverviewMode = true
+                    settings.useWideViewPort = true
+                    loadUrl(mapUrl)
+                }
+            },
+            update = { webView ->
+                if (webView.url != mapUrl) webView.loadUrl(mapUrl)
+            }
+        )
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .fillMaxWidth()
+                .background(Color.White.copy(alpha = 0.92f))
+                .clickable {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(mapUrl)))
+                }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(placeName.ifBlank { "선택한 장소" }, color = Ink, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(address.ifBlank { "위도 %.5f, 경도 %.5f".format(latitude, longitude) }, color = Color(0xFF666666), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            Text("열기", color = Olive, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+private fun kakaoMapLinkUrl(placeName: String, latitude: Double, longitude: Double): String {
+    val encodedName = URLEncoder.encode(placeName, "UTF-8")
+    return "https://map.kakao.com/link/map/$encodedName,$latitude,$longitude"
+}
+
+@Composable
 private fun MeetingDetail(meeting: Meeting) {
     SectionLabel(meeting.title)
     InfoBox(meeting.description.ifBlank { "모임 설명이 없습니다." })
-    InfoBox("책: ${meeting.bookTitle}\n저자: ${meeting.bookAuthor}\n개설자: ${meeting.hostName}\n장소: ${meeting.place}\n일시: ${meeting.meetingDate} ${meeting.meetingTime}\n참가비: ${meeting.fee}원\n인원: ${meeting.currentParticipantsCount}/${meeting.maxParticipants}")
+    InfoBox("책: ${meeting.bookTitle}\n저자: ${meeting.bookAuthor}\n개설자: ${meeting.hostName}\n장소: ${meeting.place}\n주소: ${meeting.placeAddress.ifBlank { "주소 정보 없음" }}\n일시: ${meeting.meetingDate} ${meeting.meetingTime}\n참가비: ${meeting.fee}원\n인원: ${meeting.currentParticipantsCount}/${meeting.maxParticipants}")
+    if (meeting.placeLatitude != null && meeting.placeLongitude != null) {
+        KakaoMapPreview(
+            placeName = meeting.place,
+            address = meeting.placeAddress,
+            latitude = meeting.placeLatitude,
+            longitude = meeting.placeLongitude,
+            modifier = Modifier.fillMaxWidth().height(180.dp)
+        )
+    }
     if (!meeting.bookDescription.isNullOrBlank()) InfoBox(meeting.bookDescription)
 }
 
@@ -750,5 +875,3 @@ private fun primaryButtonColors() = ButtonDefaults.buttonColors(containerColor =
 
 @Composable
 private fun mutedButtonColors() = ButtonDefaults.buttonColors(containerColor = Pale, contentColor = Color(0xFF555555))
-
-

@@ -37,6 +37,16 @@ android {
             "GEMINI_MODEL",
             (localProperties.getProperty("GEMINI_MODEL") ?: "gemini-2.5-flash").asBuildConfigString()
         )
+        buildConfigField(
+            "String",
+            "KAKAO_REST_API_KEY",
+            (localProperties.getProperty("KAKAO_REST_API_KEY") ?: "").asBuildConfigString()
+        )
+        buildConfigField(
+            "String",
+            "KAKAO_JAVASCRIPT_KEY",
+            (localProperties.getProperty("KAKAO_JAVASCRIPT_KEY") ?: "").asBuildConfigString()
+        )
     }
 
     buildTypes {

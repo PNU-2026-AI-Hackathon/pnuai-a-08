@@ -79,6 +79,9 @@ class MeetingRepository(
             "hostId" to hostId,
             "hostName" to input.hostName,
             "place" to input.place,
+            "placeAddress" to input.placeAddress,
+            "placeLatitude" to input.placeLatitude,
+            "placeLongitude" to input.placeLongitude,
             "meetingDate" to input.meetingDate,
             "meetingTime" to input.meetingTime,
             "fee" to input.fee,
@@ -188,6 +191,9 @@ data class MeetingCreateInput(
     val description: String,
     val hostName: String,
     val place: String,
+    val placeAddress: String,
+    val placeLatitude: Double?,
+    val placeLongitude: Double?,
     val meetingDate: String,
     val meetingTime: String,
     val fee: Int,
@@ -199,6 +205,5 @@ data class MeetingCreateInput(
     val bookDescription: String?,
     val bookIsbn: String?
 )
-
 
 

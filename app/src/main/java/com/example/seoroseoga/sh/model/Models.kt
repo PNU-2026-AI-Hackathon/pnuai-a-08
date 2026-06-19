@@ -24,6 +24,9 @@ data class Meeting(
     val hostId: String = "",
     val hostName: String = "",
     val place: String = "",
+    val placeAddress: String = "",
+    val placeLatitude: Double? = null,
+    val placeLongitude: Double? = null,
     val meetingDate: String = "",
     val meetingTime: String = "",
     val fee: Int = 0,
@@ -72,6 +75,15 @@ data class AIGuide(
 data class AiChatMessage(
     val text: String,
     val isUser: Boolean
+)
+
+data class KakaoPlace(
+    val id: String,
+    val name: String,
+    val address: String,
+    val phone: String,
+    val latitude: Double,
+    val longitude: Double
 )
 
 data class MyBook(

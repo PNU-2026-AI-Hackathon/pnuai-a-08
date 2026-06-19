@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import com.example.seoroseoga.R
 import com.example.seoroseoga.sh.data.BookRecognitionModule
 import com.example.seoroseoga.sh.data.GeminiChatModule
+import com.example.seoroseoga.sh.data.KakaoLocalModule
 import com.example.seoroseoga.sh.data.MeetingRepository
 import com.example.seoroseoga.sh.model.AIGuide
 import com.example.seoroseoga.sh.model.Meeting
@@ -37,6 +38,7 @@ class MainActivityBySh : ComponentActivity() {
         val repository = runCatching { MeetingRepository(userPrefs = userPrefs) }.getOrNull()
         val recognitionModule = BookRecognitionModule(this)
         val geminiChatModule = GeminiChatModule()
+        val kakaoLocalModule = KakaoLocalModule()
         setContent {
             MaterialTheme {
                 SeoroSeogaShApp(
@@ -44,6 +46,7 @@ class MainActivityBySh : ComponentActivity() {
                     repository = repository,
                     recognitionModule = recognitionModule,
                     geminiChatModule = geminiChatModule,
+                    kakaoLocalModule = kakaoLocalModule,
                     firestoreError = if (repository == null) "Firebase 설정이 필요합니다. google-services.json 추가 후 google-services 플러그인을 켜세요." else null
                 )
             }
@@ -68,6 +71,7 @@ private fun SeoroSeogaShApp(
     repository: MeetingRepository?,
     recognitionModule: BookRecognitionModule,
     geminiChatModule: GeminiChatModule,
+    kakaoLocalModule: KakaoLocalModule,
     firestoreError: String?
 ) {
     var screen by remember { mutableStateOf<ShScreen>(ShScreen.Home) }
@@ -114,6 +118,7 @@ private fun SeoroSeogaShApp(
 
         ShScreen.MeetReg -> MeetRegScreen(
             recognitionModule = recognitionModule,
+            kakaoLocalModule = kakaoLocalModule,
             onBackClick = { screen = ShScreen.Home },
             onCreateMeeting = { input, onDone, onError ->
                 if (repository == null) {
@@ -267,6 +272,5 @@ private fun sampleAiGuides(): List<AIGuide> = listOf(
         aiPrompts = listOf("이 책의 주요 개념을 쉬운 예시로 설명해줘.")
     )
 )
-
 
 
