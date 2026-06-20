@@ -1,10 +1,11 @@
 ﻿package com.example.seoroseoga.sh.ui
 
-import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
+import android.app.DownloadManager
+import android.graphics.BitmapFactory
 import android.net.Uri
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.os.Environment
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -41,6 +42,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -61,14 +63,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import com.example.seoroseoga.R
 import com.example.seoroseoga.sh.data.BookRecognitionModule
 import com.example.seoroseoga.sh.data.GeminiChatModule
@@ -82,15 +86,24 @@ import com.example.seoroseoga.sh.model.KakaoPlace
 import com.example.seoroseoga.sh.model.Meeting
 import com.example.seoroseoga.sh.model.MeetingMessage
 import com.example.seoroseoga.sh.model.MyBook
+import com.example.seoroseoga.sh.model.ReadingLog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.security.MessageDigest
 import java.net.URLEncoder
+import java.net.URL
 
-private val Olive = Color(0xFF7B8A63)
-private val Pale = Color(0xFFF4F4F0)
-private val Ink = Color(0xFF252525)
+private val Olive = Color(0xFF38BDF8)
+private val Pale = Color(0xFFF0F9FF)
+private val Ink = Color(0xFF0F172A)
+private const val BookCoverDownloadPrefs = "book_cover_downloads"
 
 @Composable
 fun HomeScreen(
@@ -112,7 +125,7 @@ fun HomeScreen(
         ) {
             item {
                 Spacer(Modifier.height(8.dp))
-                Header("서로서가", "함께 읽을 모임을 찾아보세요")
+                Header("서로서가", "책에 대한 생각을 부산대 학생들과 나눠보세요")
                 if (!errorMessage.isNullOrBlank()) InfoBox(errorMessage)
             }
             item {
@@ -466,14 +479,491 @@ fun MyPageScreen(
     meetings: List<Meeting>,
     myBooks: List<MyBook>,
     onBackClick: () -> Unit,
-    onMeetingClick: (Meeting) -> Unit
+    onMeetingClick: (Meeting) -> Unit,
+    onAddBookClick: () -> Unit,
+    onMyBookClick: (MyBook) -> Unit
 ) {
+    var selectedTab by remember { mutableStateOf(MyPageTab.Meetings) }
+
     DetailScaffold(title = "마이페이지", onBackClick = onBackClick) {
-        SectionLabel("참여한 모임")
-        if (meetings.isEmpty()) EmptyBox("참여한 모임이 없습니다.") else meetings.forEach { MeetingListRow(it, onMeetingClick) }
-        Spacer(Modifier.height(12.dp))
-        SectionLabel("직접 추가한 책")
-        myBooks.forEach { book -> InfoBox("${book.title} / ${book.author}") }
+        MyPageTabs(selectedTab = selectedTab, onTabSelected = { selectedTab = it })
+        when (selectedTab) {
+            MyPageTab.Meetings -> {
+                if (meetings.isEmpty()) {
+                    EmptyBox("참가신청한 모임이 없습니다.")
+                } else {
+                    meetings.forEach { MeetingListRow(it, onMeetingClick) }
+                }
+            }
+            MyPageTab.Library -> {
+                MyBookList(
+                    myBooks = myBooks,
+                    onMyBookClick = onMyBookClick,
+                    onAddBookClick = onAddBookClick
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AddMyBookScreen(
+    recognitionModule: BookRecognitionModule,
+    onBackClick: () -> Unit,
+    onSaveClick: (
+        title: String,
+        author: String,
+        publisher: String,
+        coverImageUri: String?,
+        bookImageUrl: String?,
+        description: String?,
+        isbn: String?,
+        totalPage: Int
+    ) -> Unit
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var title by remember { mutableStateOf("") }
+    var author by remember { mutableStateOf("") }
+    var publisher by remember { mutableStateOf("") }
+    var totalPage by remember { mutableStateOf("") }
+    var bookImageUrl by remember { mutableStateOf<String?>(null) }
+    var description by remember { mutableStateOf<String?>(null) }
+    var isbn by remember { mutableStateOf<String?>(null) }
+    var ocrCandidates by remember { mutableStateOf<List<String>>(emptyList()) }
+    var bookCandidates by remember { mutableStateOf<List<BookInfo>>(emptyList()) }
+    var loading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
+            selectedImageUri = uri
+            loading = true
+            error = null
+            scope.launch {
+                runCatching { recognitionModule.extractBookTitleCandidatesFromImage(uri) }
+                    .onSuccess {
+                        ocrCandidates = it
+                        title = it.firstOrNull().orEmpty()
+                    }
+                    .onFailure { error = it.message ?: "OCR 실패" }
+                loading = false
+            }
+        }
+    }
+
+    DetailScaffold(title = "내 책 등록", onBackClick = onBackClick) {
+        Button(
+            onClick = { imagePicker.launch(arrayOf("image/*")) },
+            colors = primaryButtonColors(),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text(if (selectedImageUri == null) "책 사진 선택" else "책 사진 다시 선택")
+        }
+        InputField("책 제목", title) { title = it }
+        if (ocrCandidates.isNotEmpty()) {
+            SectionLabel("OCR 제목 후보")
+            ocrCandidates.forEach { candidate ->
+                OcrCandidateChip(candidate) { title = candidate }
+            }
+        }
+        Button(
+            onClick = {
+                loading = true
+                error = null
+                scope.launch {
+                    runCatching { recognitionModule.searchBooksByTitle(title) }
+                        .onSuccess { results ->
+                            bookCandidates = results
+                            if (results.isEmpty()) error = "검색된 책이 없습니다."
+                        }
+                        .onFailure { throwable ->
+                            error = "Google Books 검색 실패: ${throwable.message ?: throwable::class.java.simpleName}"
+                        }
+                    loading = false
+                }
+            },
+            enabled = title.isNotBlank() && !loading,
+            colors = mutedButtonColors(),
+            shape = RoundedCornerShape(8.dp)
+        ) { Text("정보 불러오기") }
+
+        if (loading) CircularProgressIndicator(color = Olive)
+        if (!error.isNullOrBlank()) InfoBox(error.orEmpty())
+        if (bookCandidates.isNotEmpty()) {
+            SectionLabel("책 후보")
+            bookCandidates.forEach { candidate ->
+                CandidateCard(candidate) {
+                    title = candidate.bookTitle
+                    author = candidate.bookAuthor
+                    publisher = candidate.publisher
+                    totalPage = candidate.pageCount?.toString().orEmpty()
+                    bookImageUrl = candidate.bookImageUrl
+                    description = candidate.bookDescription
+                    isbn = candidate.bookIsbn
+                    bookCandidates = emptyList()
+                }
+            }
+        }
+
+        InputField("저자", author) { author = it }
+        InputField("출판사", publisher) { publisher = it }
+        InputField("전체 페이지", totalPage) { totalPage = it.filter(Char::isDigit) }
+        Button(
+            onClick = {
+                onSaveClick(
+                    title,
+                    author,
+                    publisher,
+                    selectedImageUri?.toString(),
+                    bookImageUrl,
+                    description,
+                    isbn,
+                    totalPage.toIntOrNull()?.coerceAtLeast(1) ?: 300
+                )
+            },
+            enabled = title.isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+            colors = primaryButtonColors(),
+            shape = RoundedCornerShape(8.dp)
+        ) { Text("내 서재에 저장") }
+    }
+}
+
+@Composable
+fun ReadingLogScreen(
+    readingLog: ReadingLog?,
+    onBackClick: () -> Unit,
+    onSavePage: (currentPage: Int, totalPage: Int) -> ReadingLog?,
+    onSaveQuote: (quote: String) -> ReadingLog?,
+    onSaveReview: (review: String) -> ReadingLog?
+) {
+    if (readingLog == null) {
+        DetailScaffold(title = "독서 기록", onBackClick = onBackClick) {
+            EmptyBox("독서 기록을 찾을 수 없습니다.")
+        }
+        return
+    }
+
+    var currentPage by remember(readingLog.readingLogId) { mutableStateOf(readingLog.currentPage) }
+    var totalPageText by remember(readingLog.readingLogId) { mutableStateOf(readingLog.totalPage.toString()) }
+    var directPageText by remember(readingLog.readingLogId) { mutableStateOf(readingLog.currentPage.toString()) }
+    var quote by remember(readingLog.readingLogId) { mutableStateOf(readingLog.quote) }
+    var review by remember(readingLog.readingLogId) { mutableStateOf(readingLog.review) }
+    val totalPage = totalPageText.toIntOrNull()?.coerceAtLeast(1) ?: 1
+    val progress = (currentPage.toFloat() / totalPage.toFloat()).coerceIn(0f, 1f)
+
+    DetailScaffold(title = "독서 기록", onBackClick = onBackClick) {
+        SectionLabel(readingLog.title)
+        Text(readingLog.author, color = Color(0xFF666666), fontSize = 13.sp)
+        ReadingProgressSection(
+            currentPage = currentPage,
+            totalPage = totalPage,
+            progress = progress
+        )
+        PageRecordSection(
+            totalPageText = totalPageText,
+            directPageText = directPageText,
+            onMinusClick = {
+                currentPage = (currentPage - 1).coerceAtLeast(0)
+                directPageText = currentPage.toString()
+            },
+            onPlusClick = {
+                currentPage = (currentPage + 1).coerceAtMost(totalPage)
+                directPageText = currentPage.toString()
+            },
+            onTotalPageChange = { totalPageText = it.filter(Char::isDigit) },
+            onDirectPageChange = { directPageText = it.filter(Char::isDigit) },
+            onSaveClick = {
+                val nextTotalPage = totalPageText.toIntOrNull()?.coerceAtLeast(1) ?: 1
+                val nextCurrentPage = directPageText.toIntOrNull()?.coerceIn(0, nextTotalPage) ?: currentPage
+                onSavePage(nextCurrentPage, nextTotalPage)?.let {
+                    currentPage = it.currentPage
+                    totalPageText = it.totalPage.toString()
+                    directPageText = it.currentPage.toString()
+                }
+            }
+        )
+        TextRecordSection(
+            title = "인상 깊은 문장",
+            value = quote,
+            placeholder = "기억하고 싶은 문장을 입력하세요.",
+            onValueChange = { quote = it },
+            onSaveClick = { onSaveQuote(quote)?.let { quote = it.quote } }
+        )
+        TextRecordSection(
+            title = "나의 감상",
+            value = review,
+            placeholder = "읽고 난 감상을 입력하세요.",
+            onValueChange = { review = it },
+            onSaveClick = { onSaveReview(review)?.let { review = it.review } }
+        )
+    }
+}
+
+private enum class MyPageTab(val label: String) {
+    Meetings("참가신청한 모임"),
+    Library("내 서재")
+}
+
+@Composable
+private fun MyPageTabs(selectedTab: MyPageTab, onTabSelected: (MyPageTab) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        MyPageTab.values().forEach { tab ->
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (selectedTab == tab) Olive else Pale)
+                    .clickable { onTabSelected(tab) },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    tab.label,
+                    color = if (selectedTab == tab) Color.White else Color(0xFF555555),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MyBookList(
+    myBooks: List<MyBook>,
+    onMyBookClick: (MyBook) -> Unit,
+    onAddBookClick: () -> Unit
+) {
+    if (myBooks.isEmpty()) {
+        EmptyBox("내 서재에 등록한 책이 없습니다.")
+    } else {
+        myBooks.forEach { myBook ->
+            MyBookRowCard(myBook = myBook, onClick = { onMyBookClick(myBook) })
+        }
+    }
+    AddBookCard(onClick = onAddBookClick)
+}
+
+@Composable
+private fun MyBookRowCard(myBook: MyBook, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Pale)
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        MyBookCover(myBook)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(myBook.title, color = Ink, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(myBook.author.ifBlank { "저자 정보 없음" }, color = Color(0xFF666666), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (myBook.publisher.isNotBlank()) {
+                Text(myBook.publisher, color = Color(0xFF777777), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        Text("${myBook.totalPage}p", color = Olive, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun MyBookCover(myBook: MyBook) {
+    val modifier = Modifier.size(width = 58.dp, height = 76.dp)
+    myBook.coverImageRes?.let { imageRes ->
+        Image(
+            painter = painterResource(imageRes),
+            contentDescription = myBook.title,
+            contentScale = ContentScale.Crop,
+            modifier = modifier.clip(RoundedCornerShape(8.dp))
+        )
+        return
+    }
+
+    if (!myBook.bookImageUrl.isNullOrBlank() || !myBook.coverImageUri.isNullOrBlank()) {
+        BookCoverImage(
+            localUri = myBook.coverImageUri,
+            imageUrl = myBook.bookImageUrl,
+            title = myBook.title,
+            modifier = modifier
+        )
+        return
+    }
+
+    var imageBitmap by remember(myBook.myBookId) { mutableStateOf<ImageBitmap?>(null) }
+    var loading by remember(myBook.myBookId) { mutableStateOf(true) }
+    LaunchedEffect(myBook.title, myBook.author) {
+        loading = true
+        imageBitmap = loadGoogleBooksCoverBitmap(myBook.title, myBook.author)
+        loading = false
+    }
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Pale),
+        contentAlignment = Alignment.Center
+    ) {
+        val bitmap = imageBitmap
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap,
+                contentDescription = myBook.title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        } else if (loading) {
+            CircularProgressIndicator(color = Olive, modifier = Modifier.size(22.dp))
+        } else {
+            Text("책", color = Olive, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun AddBookCard(onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.White)
+            .clickable(onClick = onClick)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 58.dp, height = 76.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(Pale),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Outlined.Add, contentDescription = null, tint = Olive)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text("새 책 등록", color = Ink, fontWeight = FontWeight.Bold)
+            Text("책 사진으로 정보를 불러오거나 직접 입력하세요.", color = Color(0xFF666666), fontSize = 12.sp)
+        }
+        Text("추가", color = Olive, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun ReadingProgressSection(currentPage: Int, totalPage: Int, progress: Float) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(Pale)
+            .padding(14.dp)
+    ) {
+        Text("독서 진행률", color = Ink, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            LinearProgressIndicator(
+                progress = { progress },
+                color = Olive,
+                trackColor = Color(0xFFE0F2FE),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(8.dp))
+            )
+            Text(
+                "${(progress * 100).toInt()}%",
+                color = Olive,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 10.dp)
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text("현재 페이지 $currentPage / ${totalPage}p", color = Color(0xFF555555), fontSize = 13.sp)
+    }
+}
+
+@Composable
+private fun PageRecordSection(
+    totalPageText: String,
+    directPageText: String,
+    onMinusClick: () -> Unit,
+    onPlusClick: () -> Unit,
+    onTotalPageChange: (String) -> Unit,
+    onDirectPageChange: (String) -> Unit,
+    onSaveClick: () -> Unit
+) {
+    Column(Modifier.fillMaxWidth()) {
+        SectionLabel("현재 페이지 기록")
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Button(onClick = onMinusClick, colors = mutedButtonColors(), shape = RoundedCornerShape(8.dp), modifier = Modifier.size(44.dp)) {
+                Text("-")
+            }
+            OutlinedTextField(
+                value = directPageText,
+                onValueChange = onDirectPageChange,
+                singleLine = true,
+                textStyle = androidx.compose.ui.text.TextStyle(textAlign = TextAlign.Center, fontWeight = FontWeight.Bold),
+                modifier = Modifier.weight(1f)
+            )
+            Text("/", color = Color(0xFF999999))
+            OutlinedTextField(
+                value = totalPageText,
+                onValueChange = onTotalPageChange,
+                singleLine = true,
+                suffix = { Text("p") },
+                modifier = Modifier.weight(1f)
+            )
+            Button(onClick = onPlusClick, colors = mutedButtonColors(), shape = RoundedCornerShape(8.dp), modifier = Modifier.size(44.dp)) {
+                Text("+")
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Button(onClick = onSaveClick, modifier = Modifier.fillMaxWidth(), colors = mutedButtonColors(), shape = RoundedCornerShape(8.dp)) {
+            Text("페이지 저장")
+        }
+    }
+}
+
+@Composable
+private fun TextRecordSection(
+    title: String,
+    value: String,
+    placeholder: String,
+    onValueChange: (String) -> Unit,
+    onSaveClick: () -> Unit
+) {
+    Column(Modifier.fillMaxWidth()) {
+        SectionLabel(title)
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            placeholder = { Text(placeholder) },
+            minLines = 4,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(8.dp))
+        Button(onClick = onSaveClick, colors = primaryButtonColors(), shape = RoundedCornerShape(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Text("저장")
+        }
     }
 }
 
@@ -628,7 +1118,7 @@ private fun MeetingListRow(meeting: Meeting, onClick: (Meeting) -> Unit) {
             Text("${meeting.bookTitle} · ${meeting.place}", color = Color(0xFF666666), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
-    HorizontalDivider(color = Color(0xFFE8E8E0))
+    HorizontalDivider(color = Color(0xFFE0F2FE))
 }
 
 @Composable
@@ -675,7 +1165,6 @@ private fun KakaoPlaceCard(place: KakaoPlace, onClick: () -> Unit) {
     }
 }
 
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun KakaoMapPreview(
     placeName: String,
@@ -689,40 +1178,52 @@ private fun KakaoMapPreview(
         kakaoMapLinkUrl(placeName.ifBlank { "선택한 장소" }, latitude, longitude)
     }
 
-    Box(modifier = modifier.clip(RoundedCornerShape(8.dp)).background(Color(0xFFE9ECE6))) {
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { viewContext ->
-                WebView(viewContext).apply {
-                    webViewClient = WebViewClient()
-                    settings.javaScriptEnabled = true
-                    settings.domStorageEnabled = true
-                    settings.loadWithOverviewMode = true
-                    settings.useWideViewPort = true
-                    loadUrl(mapUrl)
-                }
-            },
-            update = { webView ->
-                if (webView.url != mapUrl) webView.loadUrl(mapUrl)
-            }
-        )
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .background(Color.White.copy(alpha = 0.92f))
-                .clickable {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0xFFE0F2FE))
+            .clickable {
+                runCatching {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(mapUrl)))
                 }
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(placeName.ifBlank { "선택한 장소" }, color = Ink, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(address.ifBlank { "위도 %.5f, 경도 %.5f".format(latitude, longitude) }, color = Color(0xFF666666), fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Text("열기", color = Olive, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+            .padding(14.dp)
+    ) {
+        Column(
+            modifier = Modifier.align(Alignment.CenterStart)
+        ) {
+            Text(
+                "지도 보기",
+                color = Olive,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                placeName.ifBlank { "선택한 장소" },
+                color = Ink,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                address.ifBlank { "위도 %.5f, 경도 %.5f".format(latitude, longitude) },
+                color = Color(0xFF666666),
+                fontSize = 12.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
+        Text(
+            "열기",
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(8.dp))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            color = Olive,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
@@ -733,7 +1234,8 @@ private fun kakaoMapLinkUrl(placeName: String, latitude: Double, longitude: Doub
 
 @Composable
 private fun MeetingDetail(meeting: Meeting) {
-    SectionLabel(meeting.title)
+    MeetingBookCover(meeting)
+    SectionLabel(meeting.title.ifBlank { meeting.bookTitle.ifBlank { "모임 상세" } })
     InfoBox(meeting.description.ifBlank { "모임 설명이 없습니다." })
     InfoBox("책: ${meeting.bookTitle}\n저자: ${meeting.bookAuthor}\n개설자: ${meeting.hostName}\n장소: ${meeting.place}\n주소: ${meeting.placeAddress.ifBlank { "주소 정보 없음" }}\n일시: ${meeting.meetingDate} ${meeting.meetingTime}\n참가비: ${meeting.fee}원\n인원: ${meeting.currentParticipantsCount}/${meeting.maxParticipants}")
     if (meeting.placeLatitude != null && meeting.placeLongitude != null) {
@@ -746,6 +1248,178 @@ private fun MeetingDetail(meeting: Meeting) {
         )
     }
     if (!meeting.bookDescription.isNullOrBlank()) InfoBox(meeting.bookDescription)
+}
+
+@Composable
+private fun MeetingBookCover(meeting: Meeting) {
+    BookCoverImage(
+        localUri = meeting.bookImageLocalUri,
+        imageUrl = meeting.bookImageUrl,
+        title = meeting.bookTitle,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(240.dp)
+    )
+}
+
+@Composable
+private fun BookCoverImage(
+    localUri: String?,
+    imageUrl: String?,
+    title: String,
+    modifier: Modifier = Modifier
+) {
+    val readableLocalUri = localUri
+        ?.takeIf { it.startsWith("content://") || it.startsWith("file://") }
+    val remoteUrl = imageUrl?.takeIf { it.isNotBlank() }
+
+    if (readableLocalUri == null && remoteUrl == null) {
+        Box(
+            modifier = modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(Pale),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("책", color = Olive, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        }
+        return
+    }
+
+    val context = LocalContext.current
+    val imageKey = readableLocalUri ?: remoteUrl.orEmpty()
+    var imageBitmap by remember(imageKey) { mutableStateOf<ImageBitmap?>(null) }
+
+    LaunchedEffect(imageKey) {
+        imageBitmap = loadBookCoverBitmap(context, readableLocalUri, remoteUrl)
+    }
+
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Pale),
+        contentAlignment = Alignment.Center
+    ) {
+        val bitmap = imageBitmap
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap,
+                contentDescription = title,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize().padding(10.dp)
+            )
+        } else {
+            CircularProgressIndicator(color = Olive)
+        }
+    }
+}
+
+private suspend fun loadBookCoverBitmap(
+    context: Context,
+    localUri: String?,
+    imageUrl: String?
+): ImageBitmap? = withContext(Dispatchers.IO) {
+    runCatching {
+        val bitmap = if (!localUri.isNullOrBlank()) {
+            context.contentResolver.openInputStream(Uri.parse(localUri))?.use(BitmapFactory::decodeStream)
+        } else {
+            val remoteUrl = imageUrl ?: return@runCatching null
+            val coverFile = downloadBookCoverOnce(context, remoteUrl) ?: return@runCatching null
+            BitmapFactory.decodeFile(coverFile.absolutePath)
+        }
+        bitmap?.asImageBitmap()
+    }.getOrNull()
+}
+
+private suspend fun loadGoogleBooksCoverBitmap(title: String, author: String): ImageBitmap? = withContext(Dispatchers.IO) {
+    runCatching {
+        val query = listOf(title, author).filter { it.isNotBlank() }.joinToString(" ")
+        val encoded = URLEncoder.encode(query, "UTF-8")
+        val searchUrl = "https://www.googleapis.com/books/v1/volumes?q=$encoded&maxResults=5"
+        val json = URL(searchUrl).openStream().bufferedReader(Charsets.UTF_8).use { it.readText() }
+        val items = JSONObject(json).optJSONArray("items") ?: return@runCatching null
+        var thumbnail: String? = null
+        for (index in 0 until items.length()) {
+            val imageLinks = items.optJSONObject(index)
+                ?.optJSONObject("volumeInfo")
+                ?.optJSONObject("imageLinks")
+            thumbnail = imageLinks
+                ?.optString("thumbnail")
+                ?.ifBlank { imageLinks.optString("smallThumbnail") }
+                ?.replace("http://", "https://")
+                ?.takeIf { it.isNotBlank() }
+            if (thumbnail != null) break
+        }
+        thumbnail ?: return@runCatching null
+
+        URL(thumbnail).openStream().use(BitmapFactory::decodeStream)?.asImageBitmap()
+    }.getOrNull()
+}
+
+private suspend fun downloadBookCoverOnce(context: Context, imageUrl: String): File? {
+    val fileName = "book_cover_${imageUrl.sha256()}.jpg"
+    val coverDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES) ?: return null
+    val coverFile = File(coverDir, fileName)
+    if (coverFile.exists() && coverFile.length() > 0L) return coverFile
+
+    val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+    val prefs = context.getSharedPreferences(BookCoverDownloadPrefs, Context.MODE_PRIVATE)
+    val prefKey = "download_$fileName"
+    var downloadId = prefs.getLong(prefKey, -1L)
+
+    if (downloadId > 0L) {
+        when (manager.downloadStatus(downloadId)) {
+            DownloadManager.STATUS_SUCCESSFUL -> {
+                if (coverFile.exists() && coverFile.length() > 0L) return coverFile
+                prefs.edit().remove(prefKey).apply()
+                downloadId = -1L
+            }
+            DownloadManager.STATUS_FAILED, null -> {
+                prefs.edit().remove(prefKey).apply()
+                downloadId = -1L
+            }
+        }
+    }
+
+    if (downloadId <= 0L) {
+        downloadId = manager.enqueue(
+            DownloadManager.Request(Uri.parse(imageUrl))
+                .setTitle(fileName)
+                .setDescription("Downloading book cover")
+                .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+                .setDestinationUri(Uri.fromFile(coverFile))
+                .setAllowedOverMetered(true)
+                .setAllowedOverRoaming(true)
+        )
+        prefs.edit().putLong(prefKey, downloadId).apply()
+    }
+
+    repeat(60) {
+        when (manager.downloadStatus(downloadId)) {
+            DownloadManager.STATUS_SUCCESSFUL -> {
+                if (coverFile.exists() && coverFile.length() > 0L) return coverFile
+            }
+            DownloadManager.STATUS_FAILED -> {
+                prefs.edit().remove(prefKey).apply()
+                return null
+            }
+        }
+        delay(500)
+    }
+    return null
+}
+
+private fun DownloadManager.downloadStatus(downloadId: Long): Int? =
+    query(DownloadManager.Query().setFilterById(downloadId))?.use { cursor ->
+        if (!cursor.moveToFirst()) {
+            null
+        } else {
+            cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))
+        }
+    }
+
+private fun String.sha256(): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(toByteArray(Charsets.UTF_8))
+    return digest.joinToString("") { "%02x".format(it) }
 }
 
 @Composable
@@ -797,7 +1471,7 @@ private fun TopBar(title: String, onBackClick: () -> Unit) {
 @Composable
 private fun Header(title: String, subtitle: String) {
     Column {
-        Text(title, fontWeight = FontWeight.Bold, fontSize = 26.sp, color = Ink)
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 26.sp, color = Olive)
         Text(subtitle, color = Color(0xFF777777), fontSize = 14.sp)
     }
 }

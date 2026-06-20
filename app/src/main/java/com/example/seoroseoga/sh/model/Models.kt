@@ -5,6 +5,8 @@ import com.google.firebase.Timestamp
 data class BookInfo(
     val bookTitle: String = "",
     val bookAuthor: String = "",
+    val publisher: String = "",
+    val pageCount: Int? = null,
     val bookImageUrl: String? = null,
     val bookImageLocalUri: String? = null,
     val bookDescription: String? = null,
@@ -92,6 +94,11 @@ data class MyBook(
     val author: String,
     val publisher: String = "",
     val coverImageUri: String? = null,
+    val coverImageRes: Int? = null,
+    val bookImageUrl: String? = null,
+    val description: String? = null,
+    val isbn: String? = null,
+    val totalPage: Int = 300,
     val addedAtMillis: Long
 )
 

@@ -20,7 +20,10 @@ import com.example.seoroseoga.sh.data.MeetingRepository
 import com.example.seoroseoga.sh.model.AIGuide
 import com.example.seoroseoga.sh.model.Meeting
 import com.example.seoroseoga.sh.model.MyBook
+import com.example.seoroseoga.sh.model.ReadingBookSource
 import com.example.seoroseoga.sh.model.ReadingComment
+import com.example.seoroseoga.sh.model.ReadingLog
+import com.example.seoroseoga.sh.ui.AddMyBookScreen
 import com.example.seoroseoga.sh.ui.AiChatScreen
 import com.example.seoroseoga.sh.ui.AiGuideScreen
 import com.example.seoroseoga.sh.ui.HomeScreen
@@ -29,7 +32,9 @@ import com.example.seoroseoga.sh.ui.MeetRegScreen
 import com.example.seoroseoga.sh.ui.MeetingChatScreen
 import com.example.seoroseoga.sh.ui.MyPageScreen
 import com.example.seoroseoga.sh.ui.ParticipateScreen
+import com.example.seoroseoga.sh.ui.ReadingLogScreen
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 class MainActivityBySh : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,6 +66,8 @@ private sealed interface ShScreen {
     data class Chat(val chatRoomId: String) : ShScreen
     data object MyPage : ShScreen
     data class JoinedMeetingDetail(val meetingId: String) : ShScreen
+    data object AddMyBook : ShScreen
+    data class ReadingLog(val bookId: String) : ShScreen
     data class AiGuide(val guide: AIGuide) : ShScreen
     data class AiChat(val guide: AIGuide) : ShScreen
 }
@@ -80,6 +87,57 @@ private fun SeoroSeogaShApp(
     var errorMessage by remember { mutableStateOf(firestoreError) }
     var selectedMeeting by remember { mutableStateOf<Meeting?>(null) }
     val myBooks = remember { mutableStateListOf(*sampleMyBooks().toTypedArray()) }
+    val readingLogs = remember { mutableStateListOf<ReadingLog>() }
+
+    fun addMyBook(
+        title: String,
+        author: String,
+        publisher: String,
+        coverImageUri: String?,
+        bookImageUrl: String?,
+        description: String?,
+        isbn: String?,
+        totalPage: Int
+    ): MyBook {
+        val book = MyBook(
+            myBookId = UUID.randomUUID().toString(),
+            title = title,
+            author = author,
+            publisher = publisher,
+            coverImageUri = coverImageUri,
+            bookImageUrl = bookImageUrl,
+            description = description,
+            isbn = isbn,
+            totalPage = totalPage.coerceAtLeast(1),
+            addedAtMillis = System.currentTimeMillis()
+        )
+        myBooks.add(0, book)
+        return book
+    }
+
+    fun getOrCreateReadingLog(book: MyBook): ReadingLog {
+        readingLogs.firstOrNull { it.bookId == book.myBookId }?.let { return it }
+        val created = ReadingLog(
+            readingLogId = UUID.randomUUID().toString(),
+            source = ReadingBookSource.MY_BOOK,
+            bookId = book.myBookId,
+            title = book.title,
+            author = book.author,
+            coverImageUri = book.coverImageUri ?: book.bookImageUrl,
+            totalPage = book.totalPage,
+            updatedAtMillis = System.currentTimeMillis()
+        )
+        readingLogs.add(created)
+        return created
+    }
+
+    fun updateReadingLog(bookId: String, transform: (ReadingLog) -> ReadingLog): ReadingLog? {
+        val index = readingLogs.indexOfFirst { it.bookId == bookId }
+        if (index < 0) return null
+        val updated = transform(readingLogs[index]).copy(updatedAtMillis = System.currentTimeMillis())
+        readingLogs[index] = updated
+        return updated
+    }
 
     DisposableEffect(repository) {
         val weeklyRegistration = repository?.listenWeeklyMeetings(
@@ -181,7 +239,9 @@ private fun SeoroSeogaShApp(
             onMeetingClick = {
                 selectedMeeting = it
                 screen = ShScreen.JoinedMeetingDetail(it.meetingId)
-            }
+            },
+            onAddBookClick = { screen = ShScreen.AddMyBook },
+            onMyBookClick = { screen = ShScreen.ReadingLog(it.myBookId) }
         )
 
         is ShScreen.JoinedMeetingDetail -> {
@@ -200,6 +260,44 @@ private fun SeoroSeogaShApp(
             )
         }
 
+        ShScreen.AddMyBook -> AddMyBookScreen(
+            recognitionModule = recognitionModule,
+            onBackClick = { screen = ShScreen.MyPage },
+            onSaveClick = { title, author, publisher, coverImageUri, bookImageUrl, description, isbn, totalPage ->
+                addMyBook(
+                    title = title,
+                    author = author,
+                    publisher = publisher,
+                    coverImageUri = coverImageUri,
+                    bookImageUrl = bookImageUrl,
+                    description = description,
+                    isbn = isbn,
+                    totalPage = totalPage
+                )
+                screen = ShScreen.MyPage
+            }
+        )
+
+        is ShScreen.ReadingLog -> {
+            val book = myBooks.firstOrNull { it.myBookId == current.bookId }
+            val readingLog = book?.let { getOrCreateReadingLog(it) }
+            ReadingLogScreen(
+                readingLog = readingLog,
+                onBackClick = { screen = ShScreen.MyPage },
+                onSavePage = { currentPage, totalPage ->
+                    updateReadingLog(current.bookId) {
+                        it.copy(currentPage = currentPage, totalPage = totalPage)
+                    }
+                },
+                onSaveQuote = { quote ->
+                    updateReadingLog(current.bookId) { it.copy(quote = quote) }
+                },
+                onSaveReview = { review ->
+                    updateReadingLog(current.bookId) { it.copy(review = review) }
+                }
+            )
+        }
+
         is ShScreen.AiGuide -> AiGuideScreen(
             guide = current.guide,
             onBackClick = { screen = ShScreen.Home },
@@ -215,8 +313,8 @@ private fun SeoroSeogaShApp(
 }
 
 private fun sampleMyBooks(): List<MyBook> = listOf(
-    MyBook("my-book-1", "역행자", "자청", "웅진지식하우스", addedAtMillis = System.currentTimeMillis()),
-    MyBook("my-book-2", "아주 작은 습관의 힘", "제임스 클리어", "비즈니스북스", addedAtMillis = System.currentTimeMillis())
+    MyBook("my-book-1", "역행자", "자청", "웅진지식하우스", coverImageRes = R.drawable.book_reverse, totalPage = 316, addedAtMillis = System.currentTimeMillis()),
+    MyBook("my-book-2", "아주 작은 습관의 힘", "제임스 클리어", "비즈니스북스", coverImageRes = R.drawable.book_habit, totalPage = 360, addedAtMillis = System.currentTimeMillis())
 )
 
 @Suppress("unused")

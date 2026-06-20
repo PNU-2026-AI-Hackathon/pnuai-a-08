@@ -30,7 +30,6 @@ class BookRecognitionModule(private val context: Context) {
             .orEmpty()
     }
 
-
     suspend fun extractBookTitleCandidatesFromImage(imageUri: Uri): List<String> = withContext(Dispatchers.IO) {
         val image = InputImage.fromFilePath(context, imageUri)
         val recognizer = TextRecognition.getClient(KoreanTextRecognizerOptions.Builder().build())
@@ -86,6 +85,8 @@ class BookRecognitionModule(private val context: Context) {
                     BookInfo(
                         bookTitle = volume.optString("title"),
                         bookAuthor = if (authors != null && authors.length() > 0) authors.optString(0) else "",
+                        publisher = volume.optString("publisher"),
+                        pageCount = volume.optInt("pageCount").takeIf { it > 0 },
                         bookImageUrl = volume.optJSONObject("imageLinks")?.optString("thumbnail")?.replace("http://", "https://"),
                         bookDescription = volume.optString("description"),
                         bookIsbn = industryIds?.optJSONObject(0)?.optString("identifier")
