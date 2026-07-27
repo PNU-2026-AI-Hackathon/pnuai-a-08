@@ -1,10 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { BookShelf } from '@/components/BookShelf';
 import { colors, spacing, typography } from '@/constants/theme';
-import { borrowedBooks, myBooks } from '@/data/books';
+import { useHomeBooks } from '@/hooks/useHomeBooks';
 
 function SectionHeader({ title, count }: { title: string; count: number }) {
   return (
@@ -28,6 +36,7 @@ function SectionHeader({ title, count }: { title: string; count: number }) {
 
 export default function HomeScreen() {
   const { width, height } = useWindowDimensions();
+  const { borrowed, owned, isLoading, error, reload } = useHomeBooks();
   const compact = height < 700;
   const sidePadding = Math.max(spacing.lg, (width - 540) / 2);
 
@@ -54,19 +63,34 @@ export default function HomeScreen() {
           </Pressable>
         </View>
 
-        <View style={[styles.section, compact && styles.sectionCompact]}>
-          <View style={{ paddingHorizontal: sidePadding }}>
-            <SectionHeader title="빌린 책" count={2} />
+        {isLoading ? (
+          <View style={styles.status}>
+            <ActivityIndicator color={colors.accent} size="large" />
           </View>
-          <BookShelf books={borrowedBooks} variant="borrowed" />
-        </View>
+        ) : error ? (
+          <View style={styles.status}>
+            <Text style={styles.errorText}>{error}</Text>
+            <Pressable accessibilityRole="button" onPress={reload} style={styles.retryButton}>
+              <Text style={styles.retryText}>다시 시도</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <View style={[styles.section, compact && styles.sectionCompact]}>
+              <View style={{ paddingHorizontal: sidePadding }}>
+                <SectionHeader title="빌린 책" count={borrowed.length} />
+              </View>
+              <BookShelf books={borrowed} variant="borrowed" />
+            </View>
 
-        <View style={[styles.section, styles.myBooksSection, compact && styles.sectionCompact]}>
-          <View style={{ paddingHorizontal: sidePadding }}>
-            <SectionHeader title="나의 책" count={myBooks.length} />
-          </View>
-          <BookShelf books={myBooks} variant="owned" />
-        </View>
+            <View style={[styles.section, styles.myBooksSection, compact && styles.sectionCompact]}>
+              <View style={{ paddingHorizontal: sidePadding }}>
+                <SectionHeader title="나의 책" count={owned.length} />
+              </View>
+              <BookShelf books={owned} variant="owned" />
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -166,5 +190,25 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.55,
   },
+  status: {
+    minHeight: 320,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+  },
+  errorText: {
+    color: colors.textMuted,
+    fontSize: typography.body,
+  },
+  retryButton: {
+    borderRadius: 999,
+    backgroundColor: colors.accent,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  retryText: {
+    color: colors.text,
+    fontWeight: '800',
+  },
 });
-

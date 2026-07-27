@@ -1,0 +1,77 @@
+import { Book } from '@/models/Book';
+
+export const exploreBooks: Book[] = [
+  {
+    id: 'book-seoul-book-fair',
+    title: '책으로 떠나는 여행',
+    author: '서울국제도서전',
+    colors: ['#315875', '#172D42'],
+    accent: '#6FD16B',
+    motif: 'lines',
+  },
+  {
+    id: 'book-golden-current',
+    title: '황금빛 물결',
+    author: '김다은',
+    colors: ['#223B61', '#CDA95A'],
+    accent: '#E8C66C',
+    motif: 'wave',
+  },
+  {
+    id: 'book-summer-us',
+    title: '여름의 우리',
+    author: '서은채',
+    colors: ['#A9C6A0', '#D99B6C'],
+    accent: '#EDC482',
+    motif: 'circle',
+  },
+  {
+    id: 'book-colors-mind',
+    title: '마음의 색을 칠하다',
+    author: '이선우',
+    colors: ['#E2A46C', '#779AB1'],
+    accent: '#F0C77B',
+    motif: 'wave',
+  },
+  {
+    id: 'book-old-temple',
+    title: '오래된 탑의 시간',
+    author: '박지윤',
+    colors: ['#A9C4D5', '#74664D'],
+    accent: '#D7C18F',
+    motif: 'lines',
+  },
+  {
+    id: 'book-thousand-blue',
+    title: '천 개의 파랑',
+    author: '천선란',
+    colors: ['#8FC3EC', '#315FA8'],
+    accent: '#B8E322',
+    motif: 'wave',
+  },
+  {
+    id: 'book-contradiction',
+    title: '안진진은 왜 나영규를 선택했나',
+    author: '양귀자 · 모순',
+    colors: ['#CBC9B9', '#77796D'],
+    accent: '#E6E18F',
+    motif: 'cloud',
+  },
+  {
+    id: 'book-trip-with-books',
+    title: '책과 함께 걷는 길',
+    author: '서로서가 편집부',
+    colors: ['#667B58', '#C8A56E'],
+    accent: '#CFE75A',
+    motif: 'circle',
+  },
+  {
+    id: 'book-human-machine',
+    title: '사람과 기계의 시간',
+    author: '윤재호',
+    colors: ['#E9E0CB', '#8C6E50'],
+    accent: '#C8A36C',
+    motif: 'night',
+  },
+];
+
