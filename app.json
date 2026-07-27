@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "서로서가",
+    "slug": "seoroseoga",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "seoroseoga",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      "expo-status-bar"
+    ],
+    "android": {
+      "package": "com.seoroseoga.app",
+      "adaptiveIcon": {
+        "backgroundColor": "#F7F4EE"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.seoroseoga.app"
+    },
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
