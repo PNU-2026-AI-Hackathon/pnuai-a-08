@@ -124,64 +124,31 @@ React Native에서 Firebase Auth 로그인 유지에는 ram 이 아닌 디스크
 
 위 구조를 그림으로 그리면 다음과 같습니다.
 
-```text
-앱 실행
-│
-▼
-initializeApp()
-(FirebaseApp 생성)
-│
-▼
-initializeAuth()
-(Auth 생성)
-│
-▼
-AsyncStorage 확인
-│
-├── 토큰 없음
-│   │
-│   ▼
-│   로그인 화면
-│   │
-│   ▼
-│   로그인
-│   │
-│   ▼
-│   Firebase 서버
-│   │
-│   ├── ID Token
-│   └── Refresh Token
-│   │
-│   ▼
-│   AsyncStorage 저장
-│
-└── 토큰 존재
-    │
-    ▼
-    자동 로그인 복원
-    (auth 객체의 user 값 갱신)
-    │
-    ▼
-    user 상태 설정 완료
+```mermaid
+flowchart TD
+    A["앱 실행"] --> B["initializeApp()<br/>(FirebaseApp 생성)"]
+    B --> C["initializeAuth()<br/>(Auth 객체 생성)"]
+    C --> D["AsyncStorage에서 인증 정보 확인"]
 
-앱 종료
-(RAM 비움)
-│
-▼
-앱 재실행
-│
-▼
-initializeApp()
-initializeAuth()
-│
-▼
-AsyncStorage에서 토큰 읽음
-│
-▼
-auth 객체의 user 값 갱신
-│
-▼
-자동 로그인 완료
+    D -->|저장된 로그인 정보 없음| E["로그인 화면"]
+    E --> F["이메일 / 비밀번호 로그인"]
+    F --> G["Firebase Authentication 서버 인증"]
+    G --> H["ID Token + Refresh Token 발급"]
+    H --> I["React Native Persistence<br/>(AsyncStorage)에 저장"]
+    I --> J["auth.currentUser 설정"]
+    J --> K["AuthProvider가 user 상태 갱신"]
+    K --> L["로그인 완료"]
+
+    D -->|저장된 로그인 정보 존재| M["Refresh Token으로 인증 복원"]
+    M --> N["auth.currentUser 자동 복원"]
+    N --> O["AuthProvider가 user 상태 갱신"]
+    O --> P["자동 로그인 완료"]
+
+    L --> Q["앱 종료<br/>(메모리 초기화)"]
+    P --> Q
+
+    Q --> R["앱 재실행"]
+    R --> B
 ```
 
 Firebase Auth의 React Native persistence 관련 export는 번들/타입 해석 차이 때문에 TypeScript에서 바로 잡히지 않을 수 있습니다. 그래서 `types/firebase-auth-rn.d.ts`에서 `getReactNativePersistence` 타입을 보정합니다.
