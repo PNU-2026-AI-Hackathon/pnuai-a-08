@@ -106,14 +106,15 @@ android/               Android 네이티브 빌드 설정
 
 - `app/_layout.tsx`에서 `AuthProvider`가 앱 전체를 감쌉니다.
 - `AuthProvider`는 Firebase Auth의 `onAuthStateChanged`를 구독해서 `user`, `loading`, 로그인/로그아웃 함수를 제공합니다.
-- 각 화면에서는 `useAuth()`로 인증 상태와 함수를 가져옵니다.
+- 각 화면에서는 `AuthProvider` 속 정의된 `useAuth()`로 인증 상태와 함수를 가져옵니다.
+- 즉 export 된 전역 함수 컴포넌트 AuthProvider 이 AuthContext 라는 맥락 주입 호스를 통해서 모든 그 자신이 감싸고 있는 특정 ui컴포넌트(ui 별 파일!)에 전역적으로 맥락을 공급합니다.
 - `app/index.tsx`는 앱 진입 시 로그인 상태를 확인해서 `/login` 또는 `/(tabs)/home`으로 보냅니다.
 - `app/(tabs)/_layout.tsx`는 로그인하지 않은 사용자가 탭 화면에 직접 접근하면 `/login`으로 보냅니다.
 - `app/(tabs)/mypage.tsx`에서 로그아웃을 실행합니다.
 
 ## Firebase Auth 주의사항
 
-React Native에서 Firebase Auth 로그인 유지에는 AsyncStorage 기반 persistence가 필요합니다.
+React Native에서 Firebase Auth 로그인 유지에는 ram 이 아닌 디스크 속 저장소인 AsyncStorage 기반 persistence가 필요합니다.
 
 이 프로젝트는 `lib/firebase.ts`에서 다음 흐름으로 Auth를 초기화합니다.
 
@@ -121,9 +122,59 @@ React Native에서 Firebase Auth 로그인 유지에는 AsyncStorage 기반 pers
 - `initializeAuth`로 React Native persistence 연결
 - 이미 초기화된 경우 `getAuth`로 기존 Auth 인스턴스 재사용
 
+위 구조를 그림으로 그리면 다음과 같습니다.
+
+앱 실행
+│
+▼
+initializeApp()
+(FirebaseApp 생성)
+│
+▼
+initializeAuth()
+(Auth 생성)
+│
+▼
+AsyncStorage 확인
+│
+┌──토큰 없음? ─────────────┐
+│                         │
+▼                         ▼
+로그인 화면             토큰 존재
+│                         │
+▼                         ▼
+로그인                 자동 로그인 복원(auth 객체 속 값 바뀜 -> user 세팅 완료)
+│
+▼
+Firebase 서버
+│
+├── ID Token
+└── Refresh Token
+│
+▼
+AsyncStorage 저장
+│
+▼
+앱 종료
+(RAM 비움)
+│
+▼
+앱 재실행
+│
+▼
+initializeApp()
+initializeAuth()
+│
+▼
+AsyncStorage에서 토큰 읽음 (auth 객체 속 값 바뀜 -> user 세팅 완료)
+│
+▼
+자동 로그인 완료
+
+
 Firebase Auth의 React Native persistence 관련 export는 번들/타입 해석 차이 때문에 TypeScript에서 바로 잡히지 않을 수 있습니다. 그래서 `types/firebase-auth-rn.d.ts`에서 `getReactNativePersistence` 타입을 보정합니다.
 
-문제의 핵심은 다음과 같습니다.
+위 문제의 핵심은 다음과 같습니다.
 
 - Metro 런타임 번들러는 React Native 조건의 Firebase Auth 번들을 선택할 수 있습니다.
 - TypeScript는 일반 public 타입 파일을 먼저 선택해 `getReactNativePersistence`를 못 찾을 수 있습니다.
