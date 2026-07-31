@@ -82,4 +82,3 @@ export const chatRooms: ChatRoom[] = [
   },
 ];
 
->>>>>>> 7dbe18122aed1721535cdb17047abbb3f922e80d

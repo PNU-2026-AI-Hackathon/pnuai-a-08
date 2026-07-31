@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 82,
     borderRadius: radius.sm,
-    padding: spacing.===sm,
+    padding: spacing.sm,
     justifyContent: 'flex-end',
     shadowColor: '#4A3425',
     shadowOffset: { width: 0, height: 3 },
