@@ -15,7 +15,7 @@
 ## 실행 방법
 
 ```bash
-npm install
+npm install --legacy-peer-deps
 ```
 
 Expo Go로 실행:
