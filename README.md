@@ -124,6 +124,7 @@ React Native에서 Firebase Auth 로그인 유지에는 ram 이 아닌 디스크
 
 위 구조를 그림으로 그리면 다음과 같습니다.
 
+```text
 앱 실행
 │
 ▼
@@ -137,24 +138,32 @@ initializeAuth()
 ▼
 AsyncStorage 확인
 │
-┌──토큰 없음? ─────────────┐
-│                         │
-▼                         ▼
-로그인 화면             토큰 존재
-│                         │
-▼                         ▼
-로그인                 자동 로그인 복원(auth 객체 속 값 바뀜 -> user 세팅 완료)
+├── 토큰 없음
+│   │
+│   ▼
+│   로그인 화면
+│   │
+│   ▼
+│   로그인
+│   │
+│   ▼
+│   Firebase 서버
+│   │
+│   ├── ID Token
+│   └── Refresh Token
+│   │
+│   ▼
+│   AsyncStorage 저장
 │
-▼
-Firebase 서버
-│
-├── ID Token
-└── Refresh Token
-│
-▼
-AsyncStorage 저장
-│
-▼
+└── 토큰 존재
+    │
+    ▼
+    자동 로그인 복원
+    (auth 객체의 user 값 갱신)
+    │
+    ▼
+    user 상태 설정 완료
+
 앱 종료
 (RAM 비움)
 │
@@ -166,11 +175,14 @@ initializeApp()
 initializeAuth()
 │
 ▼
-AsyncStorage에서 토큰 읽음 (auth 객체 속 값 바뀜 -> user 세팅 완료)
+AsyncStorage에서 토큰 읽음
+│
+▼
+auth 객체의 user 값 갱신
 │
 ▼
 자동 로그인 완료
-
+```
 
 Firebase Auth의 React Native persistence 관련 export는 번들/타입 해석 차이 때문에 TypeScript에서 바로 잡히지 않을 수 있습니다. 그래서 `types/firebase-auth-rn.d.ts`에서 `getReactNativePersistence` 타입을 보정합니다.
 
