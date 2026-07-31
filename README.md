@@ -1,126 +1,165 @@
 # 서로서가
 
-서로서가는 책 대여 현황과 개인 서재를 한눈에 확인하는 React Native 앱입니다. 현재 버전은 제공된 `pictures/UI_home.png`의 따뜻한 서재 분위기를 바탕으로 홈 화면과 5개 하단 탭을 구현한 UI 프로토타입입니다.
+서로서가는 책 대여, 탐색, 커뮤니티 기능을 중심으로 구성한 Expo React Native 앱입니다.
+현재 프로젝트의 주 작업 대상은 루트의 Expo 앱이며, Android 네이티브 폴더는 Expo/Android 빌드용 설정과 산출물을 담습니다.
 
 ## 기술 스택
 
-- React Native + Expo
-- TypeScript
+- React Native
+- Expo
 - Expo Router
-- Expo Development Build (`expo-dev-client`)
+- TypeScript
+- Firebase Authentication
 - npm
-- Android 우선 개발, iOS 호환 구조
 
-## 설치 방법
-
-Node.js LTS와 npm이 필요합니다.
+## 실행 방법
 
 ```bash
-cd C:\seoroseoga
 npm install
 ```
 
-## Android 실행 방법
-
-Android Studio와 Android SDK를 설치하고 에뮬레이터를 실행하거나 USB 디버깅이 활성화된 Android 기기를 연결합니다.
-
-최초 실행 또는 네이티브 의존성이 변경된 경우:
-
-```bash
-npm run android
-```
-
-개발 빌드가 기기에 설치된 이후 JavaScript/TypeScript만 수정할 때:
-
-```bash
-npm run start:dev-client
-```
-
-터미널에서 `a`를 누르거나 설치된 서로서가 개발 빌드에서 표시된 개발 서버에 연결합니다.
-
-SDK 54용 Expo Go에서 실행할 때:
+Expo Go로 실행:
 
 ```bash
 npm start
 ```
 
-표시된 QR 코드를 갤럭시의 Expo Go 앱으로 스캔합니다. 휴대폰과 개발 PC는 같은 네트워크에 연결되어 있어야 합니다.
+Android 개발 빌드 실행:
 
-## Expo Development Build
-
-Expo Development Build는 `expo-dev-client`가 포함된 앱 전용 개발 클라이언트입니다. Expo Go와 달리 프로젝트가 사용하는 네이티브 모듈과 설정을 포함할 수 있습니다. `npm run android`는 Android 네이티브 프로젝트를 생성·빌드해 개발 클라이언트를 설치하고, `npm start`는 해당 클라이언트가 연결할 Metro 개발 서버를 실행합니다.
-
-네이티브 모듈 추가, Expo 설정 플러그인 변경, 앱 식별자 변경 시에는 `npm run android`로 개발 빌드를 다시 만들어야 합니다.
-
-## 디렉터리 구조
-
-```text
-seoroseoga/
-├─ app/
-│  ├─ (tabs)/
-│  │  ├─ _layout.tsx       # 하단 탭 내비게이션
-│  │  ├─ home.tsx          # 홈 화면
-│  │  └─ ...               # 탭 placeholder 화면
-│  ├─ _layout.tsx          # 앱 루트 레이아웃
-│  └─ index.tsx            # 홈 탭으로 초기 이동
-├─ components/
-│  ├─ BookShelf.tsx        # 책 카드, 캐러셀, 선반, 인디케이터
-│  └─ PlaceholderScreen.tsx
-├─ constants/
-│  └─ theme.ts             # 색상, 간격, 반경, 타이포그래피
-├─ data/
-│  └─ books.ts             # 로컬 목데이터
-├─ hooks/
-│  └─ useHomeBooks.ts       # 비동기 조회 상태와 재시도 처리
-├─ models/
-│  └─ Book.ts               # Firebase SDK에 독립적인 앱 모델
-├─ services/
-│  └─ bookRepository.ts     # 목데이터/Firebase 교체 경계
-├─ pictures/
-│  └─ UI_home.png          # 디자인 기준 이미지
-├─ app.json
-├─ package.json
-└─ tsconfig.json
+```bash
+npm run android
 ```
 
-기존 자료 폴더는 앱과 무관한 원본 자료이므로 그대로 유지합니다.
+Dev Client Metro 실행:
 
-## 주요 npm script
+```bash
+npm run start:dev-client
+```
 
-- `npm start`: SDK 54 Expo Go용 Metro 서버 실행
-- `npm run start:dev-client`: Development Build용 Metro 서버 실행
-- `npm run android`: Android 네이티브 개발 빌드 생성 및 실행
-- `npm run ios`: iOS 네이티브 개발 빌드 생성 및 실행(macOS 필요)
-- `npm run web`: 웹 개발 서버 실행
-- `npm run typecheck`: TypeScript 정적 타입 검사
-- `npm run lint`: Expo ESLint 검사
+타입 검사:
+
+```bash
+npm run typecheck
+```
+
+## 프로젝트 구조
+
+```text
+app/
+  _layout.tsx          앱 최상위 레이아웃. AuthProvider와 Stack 연결
+  index.tsx            로그인 상태에 따라 login 또는 tabs/home으로 redirect
+  login.tsx            이메일/비밀번호 로그인 화면
+  (tabs)/
+    _layout.tsx        하단 탭 레이아웃. 비로그인 사용자의 탭 직접 접근 차단
+    home.tsx           홈 화면
+    explore.tsx        탐색 화면
+    rental.tsx         대여 화면
+    community.tsx      커뮤니티 화면
+    mypage.tsx         마이페이지 및 로그아웃
+
+auth/
+  AuthProvider.tsx     Firebase Auth 상태를 앱 전체에 공급하는 Context Provider
+
+lib/
+  firebase.ts          Firebase 앱/Auth 초기화
+
+components/
+  BookShelf.tsx        홈 화면 책장 UI
+  ExploreBookCard.tsx  탐색 화면 책 카드 UI
+  ChatRoomRow.tsx      커뮤니티 채팅방 행 UI
+  PlaceholderScreen.tsx 공통 placeholder 화면
+
+constants/
+  theme.ts             색상, 간격, radius, typography 상수
+
+data/
+  books.ts             홈/대여 관련 목데이터
+  exploreBooks.ts      탐색 화면 목데이터
+  chatRooms.ts         커뮤니티 목데이터
+
+hooks/
+  useHomeBooks.ts      홈 화면 데이터 로딩 훅
+  useExploreBooks.ts   탐색 화면 데이터 로딩 훅
+  useChatRooms.ts      커뮤니티 데이터 로딩 훅
+
+models/
+  Book.ts              책 데이터 타입
+  ChatRoom.ts          채팅방 데이터 타입
+
+services/
+  bookRepository.ts    책 데이터 접근 계층
+  chatRepository.ts    채팅방 데이터 접근 계층
+
+types/
+  firebase-auth-rn.d.ts Firebase Auth React Native 타입 보정
+
+assets/, pictures/     이미지 리소스
+docs/                  기획/발표 자료
+android/               Android 네이티브 빌드 설정
+```
+
+`seoroseoga_3_activities/`가 있는 경우, 이 폴더는 업그레이드 이전 Android/Kotlin 버전의 레퍼런스입니다. 현재 Expo 앱 구현 대상에는 포함하지 않습니다.
+
+## 인증 흐름
+
+현재 인증은 Firebase Authentication 기반 이메일/비밀번호 로그인으로 구성되어 있습니다.
+
+- `app/_layout.tsx`에서 `AuthProvider`가 앱 전체를 감쌉니다.
+- `AuthProvider`는 Firebase Auth의 `onAuthStateChanged`를 구독해서 `user`, `loading`, 로그인/로그아웃 함수를 제공합니다.
+- 각 화면에서는 `useAuth()`로 인증 상태와 함수를 가져옵니다.
+- `app/index.tsx`는 앱 진입 시 로그인 상태를 확인해서 `/login` 또는 `/(tabs)/home`으로 보냅니다.
+- `app/(tabs)/_layout.tsx`는 로그인하지 않은 사용자가 탭 화면에 직접 접근하면 `/login`으로 보냅니다.
+- `app/(tabs)/mypage.tsx`에서 로그아웃을 실행합니다.
+
+## Firebase Auth 주의사항
+
+React Native에서 Firebase Auth 로그인 유지에는 AsyncStorage 기반 persistence가 필요합니다.
+
+이 프로젝트는 `lib/firebase.ts`에서 다음 흐름으로 Auth를 초기화합니다.
+
+- Firebase App 초기화
+- `initializeAuth`로 React Native persistence 연결
+- 이미 초기화된 경우 `getAuth`로 기존 Auth 인스턴스 재사용
+
+Firebase Auth의 React Native persistence 관련 export는 번들/타입 해석 차이 때문에 TypeScript에서 바로 잡히지 않을 수 있습니다. 그래서 `types/firebase-auth-rn.d.ts`에서 `getReactNativePersistence` 타입을 보정합니다.
+
+문제의 핵심은 다음과 같습니다.
+
+- Metro 런타임 번들러는 React Native 조건의 Firebase Auth 번들을 선택할 수 있습니다.
+- TypeScript는 일반 public 타입 파일을 먼저 선택해 `getReactNativePersistence`를 못 찾을 수 있습니다.
+- 따라서 런타임은 동작하지만 타입체크만 실패하는 상황이 생길 수 있습니다.
+
+이 타입 보정 파일은 그 차이를 메우기 위한 용도입니다.
 
 ## 현재 구현 범위
 
-- 초기 화면을 홈으로 설정한 5개 탭: 탐색, 대여, 홈, 커뮤니티, 마이페이지
-- Safe Area가 적용된 반응형 홈 화면
-- 상단 인사말, 부제, 알림 아이콘
-- 목데이터 기반 `빌린 책`, `나의 책` 가로 페이지 캐러셀
-- 로컬 그라데이션 표지, 나무 선반, 현재 페이지 인디케이터
-- 화면 폭에 따라 한 페이지의 책 수와 카드 크기 조정
-- 마이페이지 탭의 제목 placeholder 화면
-- 검색 가능한 탐색 탭 3열 도서 카드 그리드
-- 대여 거래 상태와 안 읽은 메시지를 표시하는 커뮤니티 채팅방 목록
+- Expo Router 기반 앱 라우팅
+- 하단 탭 5개 구성: 탐색, 대여, 홈, 커뮤니티, 마이페이지
+- 홈 화면 책장 UI
+- 탐색 화면 책 카드 UI
+- 커뮤니티 채팅방 목록 UI
+- Firebase 이메일/비밀번호 로그인
+- 앱 전체 AuthProvider 연결
+- 비로그인 사용자의 탭 화면 직접 접근 차단
+- 마이페이지 로그아웃
+- 목데이터 기반 화면 구성
 
-## Firebase 연동 방향
+## 앞으로 작업할 수 있는 항목
 
-- UI는 Firebase SDK를 직접 호출하지 않고 `services`의 repository를 통해 데이터를 조회합니다.
-- Firebase 프로젝트가 준비되면 `BookRepository`의 목 구현을 Firestore 구현으로 교체합니다.
-- Firestore `Timestamp` 등 SDK 전용 값은 repository에서 ISO 문자열 같은 앱 모델 값으로 변환합니다.
-- 사용자별 데이터는 인증 사용자 UID를 문서 경로 또는 쿼리 기준으로 사용합니다.
-- 클라이언트 코드와 별개로 Firestore Security Rules에서 소유권과 읽기·쓰기 권한을 반드시 검증합니다.
-- Firebase 설정은 환경별 설정 파일로 관리하고 서비스 계정 비밀키는 앱이나 저장소에 포함하지 않습니다.
+- Google 학교 메일 로그인
+- 학교 메일 도메인 제한
+- Firestore 연동
+- 목데이터를 실제 서버/Firebase 데이터로 교체
+- 회원가입/프로필 화면
+- 로그인 에러 메시지 세분화
+- Firestore Security Rules 작성
 
-## 향후 iOS 대응 시 확인할 항목
+## 주요 npm script
 
-- macOS/Xcode 환경에서 `npm run ios` 빌드 확인
-- Apple Developer Team, Bundle Identifier, 서명 및 프로비저닝 설정
-- iPhone 모델별 Safe Area와 하단 홈 인디케이터 여백 확인
-- iOS 기본 글꼴의 한글 줄바꿈 및 자간 차이 확인
-- 스크롤 탄성, 그림자, 탭 바 높이 등 플랫폼별 시각 차이 점검
-- 알림 기능 연결 시 APNs 권한 문구와 실제 기기 테스트
+- `npm start`: Expo Go용 Metro 서버 실행
+- `npm run start:dev-client`: Expo Dev Client용 Metro 서버 실행
+- `npm run android`: Android 개발 빌드 생성 및 실행
+- `npm run ios`: iOS 개발 빌드 생성 및 실행
+- `npm run web`: Web 개발 서버 실행
+- `npm run typecheck`: TypeScript 타입 검사
+- `npm run lint`: Expo ESLint 검사
