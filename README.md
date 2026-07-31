@@ -21,7 +21,7 @@ npm install --legacy-peer-deps
 Expo Go로 실행:
 
 ```bash
-npm start
+npm start 또는 npx expo start
 ```
 
 Android 개발 빌드 실행:
