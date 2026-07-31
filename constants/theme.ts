@@ -5,6 +5,7 @@ export const colors = {
   textMuted: '#746E69',
   accent: '#B8E322',
   accentSoft: '#DDF06C',
+  secondaryAccent: '#BE9A6D',
   inactive: '#8C8782',
   shelfLight: '#C9975D',
   shelf: '#A96F36',
@@ -36,4 +37,3 @@ export const typography = {
   body: 15,
   caption: 12,
 } as const;
-

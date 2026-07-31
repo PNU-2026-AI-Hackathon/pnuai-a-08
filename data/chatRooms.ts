@@ -1,117 +1,85 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Alert, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { ChatRoom } from '@/models/ChatRoom';
 
-import { colors, spacing, typography } from '@/constants/theme';
+const minutesAgo = (minutes: number) =>
+  new Date(Date.now() - minutes * 60 * 1000).toISOString();
 
-type RentalActionProps = {
-  label: string;
-  color: string;
-  accessibilityHint: string;
-};
+export const chatRooms: ChatRoom[] = [
+  {
+    id: 'chat-almond-harin',
+    listingId: 'listing-almond-harin',
+    participantIds: ['current-user', 'user-harin'],
+    otherUser: {
+      id: 'user-harin',
+      displayName: '하린',
+    },
+    book: {
+      id: 'book-almond',
+      title: '아몬드',
+      author: '손원평',
+      colors: ['#FFF0E7', '#D99C70'],
+    },
+    lastMessage: '내일 오후 3시에 도서관 앞에서 만나요!',
+    lastMessageAt: minutesAgo(12),
+    unreadCount: 2,
+    status: 'accepted',
+  },
+  {
+    id: 'chat-current-doyoon',
+    listingId: 'listing-current-doyoon',
+    participantIds: ['current-user', 'user-doyoon'],
+    otherUser: {
+      id: 'user-doyoon',
+      displayName: '도윤',
+    },
+    book: {
+      id: 'book-current',
+      title: '급류',
+      author: '정대건',
+      colors: ['#708899', '#3E596B'],
+    },
+    lastMessage: '책 상태 확인했어요. 대여 신청 수락할게요.',
+    lastMessageAt: minutesAgo(98),
+    unreadCount: 0,
+    status: 'requested',
+  },
+  {
+    id: 'chat-contradiction-seoyeon',
+    listingId: 'listing-contradiction-seoyeon',
+    participantIds: ['current-user', 'user-seoyeon'],
+    otherUser: {
+      id: 'user-seoyeon',
+      displayName: '서연',
+    },
+    book: {
+      id: 'book-contradiction',
+      title: '모순',
+      author: '양귀자',
+      colors: ['#D9D4CD', '#9E958B'],
+    },
+    lastMessage: '즐겁게 읽으셨어요? 반납일에 뵐게요.',
+    lastMessageAt: minutesAgo(60 * 25),
+    unreadCount: 0,
+    status: 'onLoan',
+  },
+  {
+    id: 'chat-thousand-blue-jian',
+    listingId: 'listing-thousand-blue-jian',
+    participantIds: ['current-user', 'user-jian'],
+    otherUser: {
+      id: 'user-jian',
+      displayName: '지안',
+    },
+    book: {
+      id: 'book-thousand-blue',
+      title: '천 개의 파랑',
+      author: '천선란',
+      colors: ['#8FC3EC', '#315FA8'],
+    },
+    lastMessage: '감사합니다. 다음에 또 좋은 책 나눠요!',
+    lastMessageAt: minutesAgo(60 * 72),
+    unreadCount: 0,
+    status: 'completed',
+  },
+];
 
-function CloverMark({ size }: { size: number }) {
-  return (
-    <Image
-      source={require('../../assets/images/rental-symbol.png')}
-      style={{ width: size, height: size }}
-      resizeMode="contain"
-      accessibilityRole="image"
-      accessibilityLabel="서로서가 심볼"
-    />
-  );
-}
-
-function RentalAction({ label, color, accessibilityHint }: RentalActionProps) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityHint={accessibilityHint}
-      onPress={() => Alert.alert(label, '다음 화면은 준비 중이에요.')}
-      style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
-    >
-      <View style={styles.arrowSlot}>
-        <Ionicons name="arrow-forward" color={color} size={34} />
-      </View>
-      <Text style={styles.actionLabel}>{label}</Text>
-    </Pressable>
-  );
-}
-
-export default function RentalScreen() {
-  const { width } = useWindowDimensions();
-  const contentWidth = Math.min(width - spacing.lg * 2, 460);
-  const markSize = Math.min(96, Math.max(74, width * 0.23));
-
-  return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={[styles.container, { width: contentWidth }]}>
-        <View style={styles.content}>
-          <CloverMark size={markSize} />
-
-          <View style={styles.actions}>
-            <RentalAction
-              label="빌릴래요"
-              color={colors.accent}
-              accessibilityHint="빌릴 책 찾기 기능은 준비 중입니다"
-            />
-            <RentalAction
-              label="빌려줄래요"
-              color={colors.secondaryAccent}
-              accessibilityHint="책 대여 등록 기능은 준비 중입니다"
-            />
-          </View>
-        </View>
-      </View>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  container: {
-    flex: 1,
-    alignSelf: 'center',
-  },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xl,
-  },
-  actions: {
-    width: '100%',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  action: {
-    width: '100%',
-    maxWidth: 300,
-    minHeight: 70,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingHorizontal: spacing.md,
-  },
-  actionPressed: {
-    opacity: 0.68,
-    transform: [{ scale: 0.985 }],
-  },
-  arrowSlot: {
-    width: 52,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.lg,
-  },
-  actionLabel: {
-    color: colors.text,
-    fontSize: typography.title + 3,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-  },
-});
+>>>>>>> 7dbe18122aed1721535cdb17047abbb3f922e80d

@@ -33,10 +33,18 @@ npm run android
 개발 빌드가 기기에 설치된 이후 JavaScript/TypeScript만 수정할 때:
 
 ```bash
-npm start
+npm run start:dev-client
 ```
 
 터미널에서 `a`를 누르거나 설치된 서로서가 개발 빌드에서 표시된 개발 서버에 연결합니다.
+
+SDK 54용 Expo Go에서 실행할 때:
+
+```bash
+npm start
+```
+
+표시된 QR 코드를 갤럭시의 Expo Go 앱으로 스캔합니다. 휴대폰과 개발 PC는 같은 네트워크에 연결되어 있어야 합니다.
 
 ## Expo Development Build
 
@@ -62,6 +70,12 @@ seoroseoga/
 │  └─ theme.ts             # 색상, 간격, 반경, 타이포그래피
 ├─ data/
 │  └─ books.ts             # 로컬 목데이터
+├─ hooks/
+│  └─ useHomeBooks.ts       # 비동기 조회 상태와 재시도 처리
+├─ models/
+│  └─ Book.ts               # Firebase SDK에 독립적인 앱 모델
+├─ services/
+│  └─ bookRepository.ts     # 목데이터/Firebase 교체 경계
 ├─ pictures/
 │  └─ UI_home.png          # 디자인 기준 이미지
 ├─ app.json
@@ -73,7 +87,8 @@ seoroseoga/
 
 ## 주요 npm script
 
-- `npm start`: Development Build용 Metro 서버 실행
+- `npm start`: SDK 54 Expo Go용 Metro 서버 실행
+- `npm run start:dev-client`: Development Build용 Metro 서버 실행
 - `npm run android`: Android 네이티브 개발 빌드 생성 및 실행
 - `npm run ios`: iOS 네이티브 개발 빌드 생성 및 실행(macOS 필요)
 - `npm run web`: 웹 개발 서버 실행
@@ -88,7 +103,18 @@ seoroseoga/
 - 목데이터 기반 `빌린 책`, `나의 책` 가로 페이지 캐러셀
 - 로컬 그라데이션 표지, 나무 선반, 현재 페이지 인디케이터
 - 화면 폭에 따라 한 페이지의 책 수와 카드 크기 조정
-- 홈 이외 탭의 제목 placeholder 화면
+- 마이페이지 탭의 제목 placeholder 화면
+- 검색 가능한 탐색 탭 3열 도서 카드 그리드
+- 대여 거래 상태와 안 읽은 메시지를 표시하는 커뮤니티 채팅방 목록
+
+## Firebase 연동 방향
+
+- UI는 Firebase SDK를 직접 호출하지 않고 `services`의 repository를 통해 데이터를 조회합니다.
+- Firebase 프로젝트가 준비되면 `BookRepository`의 목 구현을 Firestore 구현으로 교체합니다.
+- Firestore `Timestamp` 등 SDK 전용 값은 repository에서 ISO 문자열 같은 앱 모델 값으로 변환합니다.
+- 사용자별 데이터는 인증 사용자 UID를 문서 경로 또는 쿼리 기준으로 사용합니다.
+- 클라이언트 코드와 별개로 Firestore Security Rules에서 소유권과 읽기·쓰기 권한을 반드시 검증합니다.
+- Firebase 설정은 환경별 설정 파일로 관리하고 서비스 계정 비밀키는 앱이나 저장소에 포함하지 않습니다.
 
 ## 향후 iOS 대응 시 확인할 항목
 
@@ -98,4 +124,3 @@ seoroseoga/
 - iOS 기본 글꼴의 한글 줄바꿈 및 자간 차이 확인
 - 스크롤 탄성, 그림자, 탭 바 높이 등 플랫폼별 시각 차이 점검
 - 알림 기능 연결 시 APNs 권한 문구와 실제 기기 테스트
-

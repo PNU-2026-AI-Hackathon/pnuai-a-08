@@ -1,117 +1,76 @@
-import { Ionicons } from '@expo/vector-icons';
-import { Alert, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Book } from '@/models/Book';
 
-import { colors, spacing, typography } from '@/constants/theme';
-
-type RentalActionProps = {
-  label: string;
-  color: string;
-  accessibilityHint: string;
-};
-
-function CloverMark({ size }: { size: number }) {
-  return (
-    <Image
-      source={require('../../assets/images/rental-symbol.png')}
-      style={{ width: size, height: size }}
-      resizeMode="contain"
-      accessibilityRole="image"
-      accessibilityLabel="서로서가 심볼"
-    />
-  );
-}
-
-function RentalAction({ label, color, accessibilityHint }: RentalActionProps) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityHint={accessibilityHint}
-      onPress={() => Alert.alert(label, '다음 화면은 준비 중이에요.')}
-      style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
-    >
-      <View style={styles.arrowSlot}>
-        <Ionicons name="arrow-forward" color={color} size={34} />
-      </View>
-      <Text style={styles.actionLabel}>{label}</Text>
-    </Pressable>
-  );
-}
-
-export default function RentalScreen() {
-  const { width } = useWindowDimensions();
-  const contentWidth = Math.min(width - spacing.lg * 2, 460);
-  const markSize = Math.min(96, Math.max(74, width * 0.23));
-
-  return (
-    <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <View style={[styles.container, { width: contentWidth }]}>
-        <View style={styles.content}>
-          <CloverMark size={markSize} />
-
-          <View style={styles.actions}>
-            <RentalAction
-              label="빌릴래요"
-              color={colors.accent}
-              accessibilityHint="빌릴 책 찾기 기능은 준비 중입니다"
-            />
-            <RentalAction
-              label="빌려줄래요"
-              color={colors.secondaryAccent}
-              accessibilityHint="책 대여 등록 기능은 준비 중입니다"
-            />
-          </View>
-        </View>
-      </View>
-    </SafeAreaView>
-  );
-}
-
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
+export const exploreBooks: Book[] = [
+  {
+    id: 'book-seoul-book-fair',
+    title: '책으로 떠나는 여행',
+    author: '서울국제도서전',
+    colors: ['#315875', '#172D42'],
+    accent: '#6FD16B',
+    motif: 'lines',
   },
-  container: {
-    flex: 1,
-    alignSelf: 'center',
+  {
+    id: 'book-golden-current',
+    title: '황금빛 물결',
+    author: '김다은',
+    colors: ['#223B61', '#CDA95A'],
+    accent: '#E8C66C',
+    motif: 'wave',
   },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.xl,
+  {
+    id: 'book-summer-us',
+    title: '여름의 우리',
+    author: '서은채',
+    colors: ['#A9C6A0', '#D99B6C'],
+    accent: '#EDC482',
+    motif: 'circle',
   },
-  actions: {
-    width: '100%',
-    alignItems: 'center',
-    gap: spacing.sm,
+  {
+    id: 'book-colors-mind',
+    title: '마음의 색을 칠하다',
+    author: '이선우',
+    colors: ['#E2A46C', '#779AB1'],
+    accent: '#F0C77B',
+    motif: 'wave',
   },
-  action: {
-    width: '100%',
-    maxWidth: 300,
-    minHeight: 70,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingHorizontal: spacing.md,
+  {
+    id: 'book-old-temple',
+    title: '오래된 탑의 시간',
+    author: '박지윤',
+    colors: ['#A9C4D5', '#74664D'],
+    accent: '#D7C18F',
+    motif: 'lines',
   },
-  actionPressed: {
-    opacity: 0.68,
-    transform: [{ scale: 0.985 }],
+  {
+    id: 'book-thousand-blue',
+    title: '천 개의 파랑',
+    author: '천선란',
+    colors: ['#8FC3EC', '#315FA8'],
+    accent: '#B8E322',
+    motif: 'wave',
   },
-  arrowSlot: {
-    width: 52,
-    height: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: spacing.lg,
+  {
+    id: 'book-contradiction',
+    title: '안진진은 왜 나영규를 선택했나',
+    author: '양귀자 · 모순',
+    colors: ['#CBC9B9', '#77796D'],
+    accent: '#E6E18F',
+    motif: 'cloud',
   },
-  actionLabel: {
-    color: colors.text,
-    fontSize: typography.title + 3,
-    fontWeight: '800',
-    letterSpacing: -0.8,
+  {
+    id: 'book-trip-with-books',
+    title: '책과 함께 걷는 길',
+    author: '서로서가 편집부',
+    colors: ['#667B58', '#C8A56E'],
+    accent: '#CFE75A',
+    motif: 'circle',
   },
-});
+  {
+    id: 'book-human-machine',
+    title: '사람과 기계의 시간',
+    author: '윤재호',
+    colors: ['#E9E0CB', '#8C6E50'],
+    accent: '#C8A36C',
+    motif: 'night',
+  },
+];

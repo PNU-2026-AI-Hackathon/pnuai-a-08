@@ -202,3 +202,4 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '13deg' }],
   },
 });
+

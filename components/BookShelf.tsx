@@ -10,15 +10,15 @@ import {
   View,
 } from 'react-native';
 
-import { Book } from '@/data/books';
 import { colors, radius, spacing } from '@/constants/theme';
+import { Book } from '@/models/Book';
 
 type BookShelfProps = {
-  books: Book[];
+  books: readonly Book[];
   variant: 'borrowed' | 'owned';
 };
 
-const chunk = <T,>(items: T[], size: number) => {
+const chunk = <T,>(items: readonly T[], size: number) => {
   const pages: T[][] = [];
   for (let index = 0; index < items.length; index += size) {
     pages.push(items.slice(index, index + size));
@@ -71,6 +71,7 @@ function BookCover({
   height: number;
 }) {
   const lightText = book.motif === 'night' || book.motif === 'wave';
+  const dueLabel = book.dueDate ? formatDueDate(book.dueDate) : null;
 
   return (
     <LinearGradient
@@ -89,13 +90,23 @@ function BookCover({
         </Text>
         <Text style={[styles.author, lightText && styles.lightText]}>{book.author}</Text>
       </View>
-      {book.dueDate ? (
+      {dueLabel ? (
         <View style={[styles.dueBadge, { backgroundColor: book.accent }]}>
-          <Text style={styles.dueText}>{book.dueDate}</Text>
+          <Text style={styles.dueText}>{dueLabel}</Text>
         </View>
       ) : null}
     </LinearGradient>
   );
+}
+
+function formatDueDate(dueDate: string) {
+  const millisecondsPerDay = 1000 * 60 * 60 * 24;
+  const remainingDays = Math.max(
+    0,
+    Math.ceil((new Date(dueDate).getTime() - Date.now()) / millisecondsPerDay),
+  );
+
+  return remainingDays === 0 ? '오늘 반납' : `반납까지 ${remainingDays}일`;
 }
 
 export function BookShelf({ books, variant }: BookShelfProps) {

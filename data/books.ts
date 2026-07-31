@@ -1,11 +1,9 @@
-export type Book = {
-  id: string;
-  title: string;
-  author: string;
-  colors: readonly [string, string, ...string[]];
-  accent: string;
-  dueDate?: string;
-  motif: 'lines' | 'circle' | 'cloud' | 'night' | 'wave';
+import { Book } from '@/models/Book';
+
+const dueDateAfter = (days: number) => {
+  const dueDate = new Date();
+  dueDate.setDate(dueDate.getDate() + days);
+  return dueDate.toISOString();
 };
 
 export const borrowedBooks: Book[] = [
@@ -15,7 +13,7 @@ export const borrowedBooks: Book[] = [
     author: '정대건',
     colors: ['#718899', '#9AA8B0'],
     accent: '#E3F16B',
-    dueDate: '반납까지 5일',
+    dueDate: dueDateAfter(5),
     motif: 'lines',
   },
   {
@@ -24,7 +22,7 @@ export const borrowedBooks: Book[] = [
     author: '손원평',
     colors: ['#FFF0E7', '#F5DCCB'],
     accent: '#E3F16B',
-    dueDate: '반납까지 12일',
+    dueDate: dueDateAfter(12),
     motif: 'circle',
   },
   {
@@ -33,7 +31,7 @@ export const borrowedBooks: Book[] = [
     author: '권여선',
     colors: ['#E7E3DE', '#CFCAC5'],
     accent: '#E3F16B',
-    dueDate: '반납까지 2일',
+    dueDate: dueDateAfter(2),
     motif: 'cloud',
   },
   {
@@ -42,7 +40,7 @@ export const borrowedBooks: Book[] = [
     author: '한강',
     colors: ['#B9C9D6', '#E9E3DE'],
     accent: '#E3F16B',
-    dueDate: '반납까지 18일',
+    dueDate: dueDateAfter(18),
     motif: 'wave',
   },
 ];
@@ -97,4 +95,3 @@ export const myBooks: Book[] = [
     motif: 'lines',
   },
 ];
-
