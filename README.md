@@ -168,8 +168,11 @@ Firebase Auth의 React Native persistence 관련 export는 번들/타입 해석 
 - Expo Router 기반 앱 라우팅
 - 하단 탭 5개 구성: 탐색, 대여, 홈, 커뮤니티, 마이페이지
 - 홈 화면 책장 UI
+- 홈 책장에서 이동하는 책 상세·조건부 반납 기한·기록/AI 진입 UI
+- Gemini Interactions API 기반 책별 AI 대화 화면
 - 탐색 화면 책 카드 UI
 - 커뮤니티 채팅방 목록 UI
+- 장소별 대여 가능 도서를 넘겨보는 `빌릴래요` 둘러보기 캐러셀
 - Firebase Google OAuth 로그인
 - Google 학교 이메일 `.ac.kr` 클라이언트 제한
 - 앱 전체 AuthProvider 연결

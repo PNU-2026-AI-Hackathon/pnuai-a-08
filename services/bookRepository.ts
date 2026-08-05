@@ -10,6 +10,7 @@ export type HomeBooks = {
 export interface BookRepository {
   getHomeBooks(): Promise<HomeBooks>;
   getExploreBooks(): Promise<Book[]>;
+  getBookById(bookId: string): Promise<Book | null>;
 }
 
 /**
@@ -26,6 +27,11 @@ class MockBookRepository implements BookRepository {
 
   async getExploreBooks(): Promise<Book[]> {
     return [...exploreBooks];
+  }
+
+  async getBookById(bookId: string): Promise<Book | null> {
+    const book = [...borrowedBooks, ...myBooks].find((item) => item.id === bookId);
+    return book ? { ...book } : null;
   }
 }
 

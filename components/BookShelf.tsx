@@ -4,6 +4,7 @@ import {
   FlatList,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Pressable,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -16,6 +17,7 @@ import { Book } from '@/models/Book';
 type BookShelfProps = {
   books: readonly Book[];
   variant: 'borrowed' | 'owned';
+  onPressBook?: (book: Book) => void;
 };
 
 const chunk = <T,>(items: readonly T[], size: number) => {
@@ -65,37 +67,56 @@ function BookCover({
   book,
   width,
   height,
+  onPress,
 }: {
   book: Book;
   width: number;
   height: number;
+  onPress?: () => void;
 }) {
   const lightText = book.motif === 'night' || book.motif === 'wave';
   const dueLabel = book.dueDate ? formatDueDate(book.dueDate) : null;
 
   return (
-    <LinearGradient
-      colors={[...book.colors]}
-      style={[styles.book, { width, height }]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${book.title}, ${book.author}`}
+      accessibilityHint="책 상세 화면으로 이동합니다"
+      disabled={!onPress}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.bookPressable,
+        { width, height },
+        pressed && styles.bookPressed,
+      ]}
     >
-      <CoverMotif motif={book.motif} />
-      <View style={styles.bookText}>
-        <Text
-          numberOfLines={3}
-          style={[styles.bookTitle, lightText && styles.lightText, width < 100 && styles.bookTitleSmall]}
-        >
-          {book.title}
-        </Text>
-        <Text style={[styles.author, lightText && styles.lightText]}>{book.author}</Text>
-      </View>
-      {dueLabel ? (
-        <View style={[styles.dueBadge, { backgroundColor: book.accent }]}>
-          <Text style={styles.dueText}>{dueLabel}</Text>
+      <LinearGradient
+        colors={[...book.colors]}
+        style={styles.book}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+      >
+        <CoverMotif motif={book.motif} />
+        <View style={styles.bookText}>
+          <Text
+            numberOfLines={3}
+            style={[
+              styles.bookTitle,
+              lightText && styles.lightText,
+              width < 100 && styles.bookTitleSmall,
+            ]}
+          >
+            {book.title}
+          </Text>
+          <Text style={[styles.author, lightText && styles.lightText]}>{book.author}</Text>
         </View>
-      ) : null}
-    </LinearGradient>
+        {dueLabel ? (
+          <View style={[styles.dueBadge, { backgroundColor: book.accent }]}>
+            <Text style={styles.dueText}>{dueLabel}</Text>
+          </View>
+        ) : null}
+      </LinearGradient>
+    </Pressable>
   );
 }
 
@@ -109,7 +130,7 @@ function formatDueDate(dueDate: string) {
   return remainingDays === 0 ? '오늘 반납' : `반납까지 ${remainingDays}일`;
 }
 
-export function BookShelf({ books, variant }: BookShelfProps) {
+export function BookShelf({ books, variant, onPressBook }: BookShelfProps) {
   const { width: screenWidth } = useWindowDimensions();
   const [activePage, setActivePage] = useState(0);
   const horizontalPadding = spacing.lg;
@@ -141,7 +162,13 @@ export function BookShelf({ books, variant }: BookShelfProps) {
         renderItem={({ item }) => (
           <View style={[styles.page, { width: pageWidth, gap, paddingHorizontal: horizontalPadding }]}>
             {item.map((book) => (
-              <BookCover key={book.id} book={book} width={bookWidth} height={bookHeight} />
+              <BookCover
+                key={book.id}
+                book={book}
+                width={bookWidth}
+                height={bookHeight}
+                onPress={onPressBook ? () => onPressBook(book) : undefined}
+              />
             ))}
           </View>
         )}
@@ -175,16 +202,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
   },
-  book: {
-    borderTopLeftRadius: radius.sm,
-    borderTopRightRadius: radius.sm,
-    overflow: 'hidden',
-    justifyContent: 'flex-end',
+  bookPressable: {
     shadowColor: '#442A18',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.18,
     shadowRadius: 10,
     elevation: 6,
+  },
+  bookPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.98 }],
+  },
+  book: {
+    width: '100%',
+    height: '100%',
+    borderTopLeftRadius: radius.sm,
+    borderTopRightRadius: radius.sm,
+    overflow: 'hidden',
+    justifyContent: 'flex-end',
   },
   bookText: {
     alignItems: 'center',

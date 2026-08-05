@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { Alert, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,27 +9,16 @@ type RentalActionProps = {
   label: string;
   color: string;
   accessibilityHint: string;
+  onPress: () => void;
 };
 
-function CloverMark({ size }: { size: number }) {
-  return (
-    <Image
-      source={require('../../assets/images/rental-symbol.png')}
-      style={{ width: size, height: size }}
-      resizeMode="contain"
-      accessibilityRole="image"
-      accessibilityLabel="서로서가 심볼"
-    />
-  );
-}
-
-function RentalAction({ label, color, accessibilityHint }: RentalActionProps) {
+function RentalAction({ label, color, accessibilityHint, onPress }: RentalActionProps) {
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityHint={accessibilityHint}
-      onPress={() => Alert.alert(label, '다음 화면은 준비 중이에요.')}
+      onPress={onPress}
       style={({ pressed }) => [styles.action, pressed && styles.actionPressed]}
     >
       <View style={styles.arrowSlot}>
@@ -48,18 +38,26 @@ export default function RentalScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={[styles.container, { width: contentWidth }]}>
         <View style={styles.content}>
-          <CloverMark size={markSize} />
+          <Image
+            source={require('../../../assets/images/rental-symbol.png')}
+            style={{ width: markSize, height: markSize }}
+            resizeMode="contain"
+            accessibilityRole="image"
+            accessibilityLabel="서로서가 심볼"
+          />
 
           <View style={styles.actions}>
             <RentalAction
               label="빌릴래요"
               color={colors.accent}
-              accessibilityHint="빌릴 책 찾기 기능은 준비 중입니다"
+              accessibilityHint="대여 가능한 책 둘러보기 화면으로 이동합니다"
+              onPress={() => router.push('/rental/borrow')}
             />
             <RentalAction
               label="빌려줄래요"
               color={colors.secondaryAccent}
               accessibilityHint="책 대여 등록 기능은 준비 중입니다"
+              onPress={() => Alert.alert('빌려줄래요', '책 대여 등록 화면은 준비 중이에요.')}
             />
           </View>
         </View>
@@ -69,25 +67,15 @@ export default function RentalScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  container: {
-    flex: 1,
-    alignSelf: 'center',
-  },
+  safeArea: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1, alignSelf: 'center' },
   content: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: spacing.xl,
   },
-  actions: {
-    width: '100%',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
+  actions: { width: '100%', alignItems: 'center', gap: spacing.sm },
   action: {
     width: '100%',
     maxWidth: 300,
@@ -97,10 +85,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     paddingHorizontal: spacing.md,
   },
-  actionPressed: {
-    opacity: 0.68,
-    transform: [{ scale: 0.985 }],
-  },
+  actionPressed: { opacity: 0.68, transform: [{ scale: 0.985 }] },
   arrowSlot: {
     width: 52,
     height: 52,

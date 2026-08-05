@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import {
   ActivityIndicator,
   Pressable,
@@ -13,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { BookShelf } from '@/components/BookShelf';
 import { colors, spacing, typography } from '@/constants/theme';
 import { useHomeBooks } from '@/hooks/useHomeBooks';
+import { Book } from '@/models/Book';
 
 function SectionHeader({ title, count }: { title: string; count: number }) {
   return (
@@ -40,6 +42,10 @@ export default function HomeScreen() {
   const compact = height < 700;
   const sidePadding = Math.max(spacing.lg, (width - 540) / 2);
 
+  const openBook = (book: Book) => {
+    router.push({ pathname: '/home/[bookId]', params: { bookId: book.id } });
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <ScrollView
@@ -47,7 +53,12 @@ export default function HomeScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.header, { paddingHorizontal: sidePadding, paddingTop: compact ? spacing.md : spacing.lg }]}>
+        <View
+          style={[
+            styles.header,
+            { paddingHorizontal: sidePadding, paddingTop: compact ? spacing.md : spacing.lg },
+          ]}
+        >
           <View>
             <Text style={[styles.greeting, width < 360 && styles.greetingSmall]}>안녕하세요! 👋</Text>
             <Text style={styles.subtitle}>오늘도 좋은 책을 만나보세요.</Text>
@@ -80,14 +91,14 @@ export default function HomeScreen() {
               <View style={{ paddingHorizontal: sidePadding }}>
                 <SectionHeader title="빌린 책" count={borrowed.length} />
               </View>
-              <BookShelf books={borrowed} variant="borrowed" />
+              <BookShelf books={borrowed} variant="borrowed" onPressBook={openBook} />
             </View>
 
             <View style={[styles.section, styles.myBooksSection, compact && styles.sectionCompact]}>
               <View style={{ paddingHorizontal: sidePadding }}>
                 <SectionHeader title="나의 책" count={owned.length} />
               </View>
-              <BookShelf books={owned} variant="owned" />
+              <BookShelf books={owned} variant="owned" onPressBook={openBook} />
             </View>
           </>
         )}
@@ -97,16 +108,9 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingBottom: spacing.lg,
-  },
+  safeArea: { flex: 1, backgroundColor: colors.background },
+  scroll: { flex: 1 },
+  content: { paddingBottom: spacing.lg },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -119,9 +123,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: -1.2,
   },
-  greetingSmall: {
-    fontSize: 31,
-  },
+  greetingSmall: { fontSize: 31 },
   subtitle: {
     color: colors.textMuted,
     fontSize: typography.subtitle,
@@ -146,50 +148,26 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.background,
   },
-  section: {
-    marginTop: spacing.xxl,
-  },
-  sectionCompact: {
-    marginTop: spacing.xl,
-  },
-  myBooksSection: {
-    marginTop: spacing.xl,
-  },
+  section: { marginTop: spacing.xxl },
+  sectionCompact: { marginTop: spacing.xl },
+  myBooksSection: { marginTop: spacing.xl },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: spacing.lg,
   },
-  sectionHeading: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: spacing.md,
-  },
+  sectionHeading: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.md },
   sectionTitle: {
     color: colors.text,
     fontSize: typography.title,
     fontWeight: '900',
     letterSpacing: -0.8,
   },
-  count: {
-    color: colors.textMuted,
-    fontSize: typography.subtitle,
-    fontWeight: '600',
-  },
-  seeAll: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 1,
-  },
-  seeAllText: {
-    color: colors.text,
-    fontSize: typography.body,
-    fontWeight: '600',
-  },
-  pressed: {
-    opacity: 0.55,
-  },
+  count: { color: colors.textMuted, fontSize: typography.subtitle, fontWeight: '600' },
+  seeAll: { flexDirection: 'row', alignItems: 'center', gap: 1 },
+  seeAllText: { color: colors.text, fontSize: typography.body, fontWeight: '600' },
+  pressed: { opacity: 0.55 },
   status: {
     minHeight: 320,
     alignItems: 'center',
@@ -197,19 +175,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     gap: spacing.md,
   },
-  errorText: {
-    color: colors.textMuted,
-    fontSize: typography.body,
-  },
+  errorText: { color: colors.textMuted, fontSize: typography.body },
   retryButton: {
     borderRadius: 999,
     backgroundColor: colors.accent,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
-  retryText: {
-    color: colors.text,
-    fontWeight: '800',
-  },
+  retryText: { color: colors.text, fontWeight: '800' },
 });
 
