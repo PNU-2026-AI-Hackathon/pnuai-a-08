@@ -139,7 +139,7 @@ android/               Android 네이티브 빌드 설정
 - Firebase Console에서 Google sign-in provider를 활성화해야 합니다.
 - Google OAuth Web client ID는 `.env`의 `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`에 설정합니다.
 - Expo Go 테스트용 redirect URI는 `.env`의 `EXPO_PUBLIC_EXPO_GOOGLE_REDIRECT_URI`에 설정합니다.
-- Web 로컬 테스트 시에는 Google Cloud Console의 Web OAuth Client에 `http://localhost:8081` 같은 개발 서버 origin을 redirect URI로 추가해야 합니다.
+- Web 로컬 테스트 시를 위해 Google Cloud Console의 Web OAuth Client에 `http://localhost:8081` 같은 개발 서버 origin을 임시로 redirect URI로 추가해놨습니다.
 - dev-client/standalone 빌드 단계에서는 앱 scheme/deep link, Android SHA-1, iOS bundle identifier 기준으로 OAuth 설정을 다시 점검해야 합니다.
 - 현재 `.ac.kr` 제한은 클라이언트 레벨 제한입니다. Firestore를 붙이면 Security Rules에서도 `request.auth.token.email` 기반으로 `.ac.kr` 검사를 추가해야 합니다.
 
