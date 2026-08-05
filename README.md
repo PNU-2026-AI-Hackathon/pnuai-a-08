@@ -102,14 +102,46 @@ android/               Android 네이티브 빌드 설정
 
 ## 인증 흐름
 
-현재 인증은 Firebase Authentication 기반 이메일/비밀번호 로그인으로 구성되어 있습니다.
+현재 인증은 Firebase Authentication 기반 Google OAuth 로그인으로 구성되어 있습니다.
 
 - `app/_layout.tsx`에서 `AuthProvider`가 앱 전체를 감쌉니다.
-- `AuthProvider`는 Firebase Auth의 `onAuthStateChanged`를 구독해서 `user`, `loading`, 로그인/로그아웃 함수를 제공합니다.
+- `AuthProvider`는 Firebase Auth의 `onAuthStateChanged`를 구독해서 `user`, `loading`, Google 로그인/로그아웃 함수를 제공합니다.
+- Google 로그인은 `expo-auth-session`으로 Google OAuth 화면을 열고, redirect로 받은 `id_token`을 Firebase `GoogleAuthProvider.credential()`로 변환한 뒤 `signInWithCredential()`로 Firebase Auth에 로그인합니다.
+- 처음 사용하는 Google 계정이면 Firebase Auth 사용자가 자동 생성되고, 이미 등록된 Google 계정이면 기존 사용자로 로그인됩니다.
+- 클라이언트에서는 Google 로그인 직후 이메일이 `.ac.kr`로 끝나는지 확인하고, 학교 이메일이 아니면 즉시 로그아웃시켜 앱 진입을 막습니다.
 - 각 화면에서는 `useAuth()`로 인증 상태와 함수를 가져옵니다.
 - `app/index.tsx`는 앱 진입 시 로그인 상태를 확인해서 `/login` 또는 `/(tabs)/home`으로 보냅니다.
 - `app/(tabs)/_layout.tsx`는 로그인하지 않은 사용자가 탭 화면에 직접 접근하면 `/login`으로 보냅니다.
 - `app/(tabs)/mypage.tsx`에서 로그아웃을 실행합니다.
+
+## 변경 현황
+
+### 2026-08-05
+
+- 이메일/비밀번호 로그인 화면을 Google 로그인 버튼 기반 화면으로 교체했습니다.
+- `AuthProvider`에 `signInWithGoogle()`을 추가했습니다.
+- Google OAuth 결과로 받은 `id_token`을 Firebase credential로 변환해 Firebase Auth 로그인에 연결했습니다.
+- `.ac.kr` 학교 이메일이 아닌 Google 계정은 로그인 직후 로그아웃 처리하고 로그인 화면에 안내 메시지를 표시합니다.
+- Expo OAuth 흐름을 위해 `expo-auth-session`, `expo-crypto`, `expo-web-browser`를 추가했습니다.
+- Expo Go 테스트용 Google redirect URI를 환경변수 `EXPO_PUBLIC_EXPO_GOOGLE_REDIRECT_URI`로 분리했습니다.
+
+파일별 주요 변경은 다음과 같습니다.
+
+- `auth/AuthProvider.tsx`: Google OAuth 요청, Firebase credential 변환, `signInWithCredential()` 로그인, `.ac.kr` 이메일 검사 로직을 담당합니다.
+- `app/login.tsx`: 이메일/비밀번호 입력 UI를 제거하고 Google 로그인 버튼과 학교 이메일 제한 에러 메시지를 표시합니다.
+- `lib/firebase.ts`: 직접 변경하지 않았으며, 기존 Firebase Auth/AsyncStorage persistence 구조를 그대로 사용합니다.
+- `.env`: Google OAuth Web client ID와 Expo Go redirect URI를 환경변수로 관리합니다.
+- `package.json`, `package-lock.json`: Expo OAuth 관련 패키지를 추가했습니다.
+- `app.json`: `expo-web-browser` config plugin을 추가했습니다.
+
+## Google OAuth 설정 현황
+
+- Firebase Console에서 Google sign-in provider를 활성화해야 합니다.
+- Google OAuth Web client ID는 `.env`의 `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`에 설정합니다.
+- Expo Go 테스트용 redirect URI는 `.env`의 `EXPO_PUBLIC_EXPO_GOOGLE_REDIRECT_URI`에 설정합니다.
+- Web 로컬 테스트 시에는 Google Cloud Console의 Web OAuth Client에 `http://localhost:8081` 같은 개발 서버 origin을 redirect URI로 추가해야 합니다.
+- dev-client/standalone 빌드 단계에서는 앱 scheme/deep link, Android SHA-1, iOS bundle identifier 기준으로 OAuth 설정을 다시 점검해야 합니다.
+- 현재 `.ac.kr` 제한은 클라이언트 레벨 제한입니다. Firestore를 붙이면 Security Rules에서도 `request.auth.token.email` 기반으로 `.ac.kr` 검사를 추가해야 합니다.
 
 ## Firebase Auth 주의사항
 
@@ -138,7 +170,8 @@ Firebase Auth의 React Native persistence 관련 export는 번들/타입 해석 
 - 홈 화면 책장 UI
 - 탐색 화면 책 카드 UI
 - 커뮤니티 채팅방 목록 UI
-- Firebase 이메일/비밀번호 로그인
+- Firebase Google OAuth 로그인
+- Google 학교 이메일 `.ac.kr` 클라이언트 제한
 - 앱 전체 AuthProvider 연결
 - 비로그인 사용자의 탭 화면 직접 접근 차단
 - 마이페이지 로그아웃
@@ -146,8 +179,6 @@ Firebase Auth의 React Native persistence 관련 export는 번들/타입 해석 
 
 ## 앞으로 작업할 수 있는 항목
 
-- Google 학교 메일 로그인
-- 학교 메일 도메인 제한
 - Firestore 연동
 - 목데이터를 실제 서버/Firebase 데이터로 교체
 - 회원가입/프로필 화면

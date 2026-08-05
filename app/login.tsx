@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { router } from "expo-router";
+import { useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -6,31 +7,39 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { useAuth } from '@/auth/AuthProvider';
-import { colors, radius, spacing, typography } from '@/constants/theme';
+import {
+  UNIVERSITY_EMAIL_REQUIRED_ERROR,
+  useAuth,
+} from "@/auth/AuthProvider";
+import { colors, radius, spacing, typography } from "@/constants/theme";
 
 export default function LoginScreen() {
-  const { signInWithEmail } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const { signInWithGoogle } = useAuth();
+  const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const handleLogin = async () => {
-    setError('');
+  const handleGoogleLogin = async () => {
+    setError("");
     setSubmitting(true);
 
     try {
-      await signInWithEmail(email, password);
-      router.replace('/(tabs)/home');
-    } catch {
-      setError('이메일 또는 비밀번호를 확인해 주세요.');
+      await signInWithGoogle();
+      router.replace("/(tabs)/home");
+    } catch (error) {
+      console.error("Google sign-in failed:", error);
+      if (
+        error instanceof Error &&
+        error.message === UNIVERSITY_EMAIL_REQUIRED_ERROR
+      ) {
+        setError("대학교 이메일(.ac.kr) 계정으로만 이용할 수 있습니다.");
+        return;
+      }
+
+      setError("Google 로그인에 실패했습니다. 다시 시도해 주세요.");
     } finally {
       setSubmitting(false);
     }
@@ -39,40 +48,21 @@ export default function LoginScreen() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.container}
       >
         <View style={styles.header}>
           <Text style={styles.title}>로그인</Text>
-          <Text style={styles.subtitle}>서로서가 계정으로 계속하기</Text>
+          <Text style={styles.subtitle}>Google 계정으로 서로서가를 시작하세요.</Text>
         </View>
 
         <View style={styles.form}>
-          <TextInput
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            onChangeText={setEmail}
-            placeholder="이메일"
-            placeholderTextColor={colors.inactive}
-            style={styles.input}
-            value={email}
-          />
-          <TextInput
-            onChangeText={setPassword}
-            placeholder="비밀번호"
-            placeholderTextColor={colors.inactive}
-            secureTextEntry
-            style={styles.input}
-            value={password}
-          />
-
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <Pressable
             accessibilityRole="button"
             disabled={submitting}
-            onPress={handleLogin}
+            onPress={handleGoogleLogin}
             style={({ pressed }) => [
               styles.button,
               (pressed || submitting) && styles.buttonPressed,
@@ -81,7 +71,7 @@ export default function LoginScreen() {
             {submitting ? (
               <ActivityIndicator color={colors.text} />
             ) : (
-              <Text style={styles.buttonText}>로그인</Text>
+              <Text style={styles.buttonText}>Google로 로그인</Text>
             )}
           </Pressable>
         </View>
@@ -97,7 +87,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    justifyContent: 'center',
+    justifyContent: "center",
     paddingHorizontal: spacing.lg,
   },
   header: {
@@ -106,7 +96,7 @@ const styles = StyleSheet.create({
   title: {
     color: colors.text,
     fontSize: typography.greeting,
-    fontWeight: '900',
+    fontWeight: "900",
   },
   subtitle: {
     color: colors.textMuted,
@@ -116,25 +106,15 @@ const styles = StyleSheet.create({
   form: {
     gap: spacing.md,
   },
-  input: {
-    height: 54,
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    color: colors.text,
-    fontSize: typography.body,
-    paddingHorizontal: spacing.md,
-  },
   error: {
-    color: '#B3261E',
+    color: "#B3261E",
     fontSize: typography.caption,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   button: {
     height: 54,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     borderRadius: radius.sm,
     backgroundColor: colors.accent,
     marginTop: spacing.sm,
@@ -145,6 +125,6 @@ const styles = StyleSheet.create({
   buttonText: {
     color: colors.text,
     fontSize: typography.body,
-    fontWeight: '800',
+    fontWeight: "800",
   },
 });
