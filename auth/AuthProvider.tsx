@@ -1,6 +1,4 @@
-import * as Google from "expo-auth-session/providers/google";
-import { ResponseType } from "expo-auth-session";
-import * as WebBrowser from "expo-web-browser";
+import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import {
   GoogleAuthProvider,
   User,
@@ -18,21 +16,14 @@ import {
   useMemo,
   useState,
 } from "react";
-import { Platform } from "react-native";
 
 // 로그인 용으로 우리가 쓸려고 만든 auth 라는 이름의 객체 불러오기(firebase sdk 의 Auth 라는 타입의 객체의 인스턴스)
 // 이 auth 객체가 로그인한 사용자의 상태 (currentUser , IdToken) 토큰 등을 가지고 있다
 // 즉 한 사용자의 기기에서 한 앱 객체 - 한 인증 정보 객체가 딱 하나씩 존재한다고 생각하면 됨
 import { auth } from "../lib/firebase";
 
-WebBrowser.maybeCompleteAuthSession();
-
 const GOOGLE_WEB_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
-const EXPO_GOOGLE_REDIRECT_URI =
-  process.env.EXPO_PUBLIC_EXPO_GOOGLE_REDIRECT_URI;
-const WEB_GOOGLE_REDIRECT_URI =
-  Platform.OS === "web" ? window.location.origin : EXPO_GOOGLE_REDIRECT_URI;
 const UNIVERSITY_EMAIL_SUFFIX = ".ac.kr";
 export const UNIVERSITY_EMAIL_REQUIRED_ERROR =
   "UNIVERSITY_EMAIL_REQUIRED";
@@ -69,17 +60,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [, , promptGoogleSignIn] = Google.useAuthRequest({
-    clientId: GOOGLE_WEB_CLIENT_ID,
-    redirectUri: WEB_GOOGLE_REDIRECT_URI,
-    responseType: ResponseType.IdToken,
-    scopes: ["openid", "profile", "email"],
-    selectAccount: true,
-  });
-
   // auth 객체를 감시하다가 state 가 바뀌면 바뀐 currentUser 값을 넣은 setUser 을 실행해서 , 전역 user 값을 바꾼다
   //"AuthProvider가 처음 생성되면(앱을 킬때마다 AuthProvider 렌더링 됨 -> 내가 app 폴더 속 파일들을 그렇게 만들거라서) AuthProvider가 사라질 때는 감시를 해제한다."
   useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: GOOGLE_WEB_CLIENT_ID,
+    });
+
     const unsubscribe = onAuthStateChanged(
       auth,
       currentUser => {
@@ -110,10 +97,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   };
 
   // 기존 email/password 로그인은 앱이 Firebase Auth API에 email/password를 바로 전송하는 방식이었다.
-  // Google 로그인은 expo-auth-session이 Google 로그인 창을 열고, redirect로 받은 id token을 런타임에 돌려준다.
-  // Expo Go에서는 Expo Go 런타임이 이 redirect를 받아 현재 개발 중인 앱 세션으로 전달한다.
-  // dev-client/standalone에서는 설치된 우리 앱의 scheme/deep link가 redirect를 직접 받아 앱 코드로 전달한다.
-  // 앱은 id token을 Firebase Google credential로 바꾼 뒤 signInWithCredential()로 Firebase Auth에 로그인한다.
+  // Google 로그인은 native Google Sign-In으로 id token을 받은 뒤 Firebase credential로 바꿔 로그인한다.
   // Firebase Google 로그인의 경우 처음 쓰는 Google 계정이면 자동으로 회원가입되고, 기존 계정이면 로그인된다.
   // 클라이언트 검사는 보안 장벽은 아니지만, 지금은 .ac.kr 학교 이메일이 아니면 즉시 로그아웃시켜 앱 진입을 막는다.
   // 이 방식은 Firebase Auth 계정 생성 자체를 막지는 못하므로, Firestore를 붙이면 Security Rules에서도 .ac.kr 검사를 한 번 더 해야 한다.
@@ -122,17 +106,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw new Error("Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID.");
     }
 
-    if (!WEB_GOOGLE_REDIRECT_URI) {
-      throw new Error("Missing Google redirect URI.");
-    }
-
-    const result = await promptGoogleSignIn();
-
-    if (result.type !== "success") {
-      throw new Error("Google sign-in was cancelled.");
-    }
-
-    const idToken = result.params.id_token;
+    await GoogleSignin.hasPlayServices();
+    const result = await GoogleSignin.signIn();
+    const idToken = result.data?.idToken;
 
     if (!idToken) {
       throw new Error("Google did not return an id token.");
@@ -170,7 +146,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       signOutUser,
       getIdToken,
     }),
-    [user, loading, promptGoogleSignIn]
+    [user, loading]
   );
 
   return (

@@ -9,10 +9,12 @@
     "newArchEnabled": true,
     "plugins": [
       "expo-router",
-      "expo-web-browser"
+      "expo-web-browser",
+      "@react-native-google-signin/google-signin"
     ],
     "android": {
       "package": "com.seoroseoga.app",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#F7F4EE"
       },
@@ -24,6 +26,13 @@
     },
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e5b63a17-40f3-46d8-b1e1-1ae8bc54116f"
+      }
+    },
+    "owner": "seoroseoga_project"
   }
 }
