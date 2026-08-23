@@ -10,7 +10,16 @@
     "plugins": [
       "expo-router",
       "expo-web-browser",
-      "@react-native-google-signin/google-signin"
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "책 표지 사진을 선택하기 위해 사진 접근을 허용해주세요.",
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      "@react-native-google-signin/google-signin",
+      "expo-font"
     ],
     "android": {
       "package": "com.seoroseoga.app",

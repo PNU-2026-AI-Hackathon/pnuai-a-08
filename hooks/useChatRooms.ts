@@ -9,35 +9,21 @@ export function useChatRooms(userId: string) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let isActive = true;
+    setIsLoading(true);
+    setError(null);
 
-    const load = async () => {
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const nextRooms = await chatRepository.getRooms(userId);
-        if (isActive) {
-          setRooms(nextRooms);
-        }
-      } catch {
-        if (isActive) {
-          setError('채팅방을 불러오지 못했어요.');
-        }
-      } finally {
-        if (isActive) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void load();
-
-    return () => {
-      isActive = false;
-    };
+    return chatRepository.subscribeRooms(
+      userId,
+      (nextRooms) => {
+        setRooms(nextRooms);
+        setIsLoading(false);
+      },
+      () => {
+        setError('채팅방을 불러오지 못했어요.');
+        setIsLoading(false);
+      },
+    );
   }, [userId]);
 
   return { rooms, isLoading, error };
 }
-

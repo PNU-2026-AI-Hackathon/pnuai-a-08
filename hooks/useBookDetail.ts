@@ -12,6 +12,15 @@ export function useBookDetail(bookId: string) {
     let isActive = true;
 
     const load = async () => {
+      if (!bookId) {
+        if (isActive) {
+          setBook(null);
+          setError(null);
+          setIsLoading(false);
+        }
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
 
@@ -34,4 +43,3 @@ export function useBookDetail(bookId: string) {
 
   return { book, isLoading, error };
 }
-

@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useBookDetail } from '@/hooks/useBookDetail';
 import { AiChatMessage } from '@/models/AiChatMessage';
+import { Book } from '@/models/Book';
 import { askGeminiAboutBook } from '@/services/geminiService';
 
 function getFriendlyError(error: unknown) {
@@ -41,9 +42,28 @@ function getFriendlyError(error: unknown) {
 }
 
 export default function AiBookChatScreen() {
-  const { bookId } = useLocalSearchParams<{ bookId: string }>();
+  const { bookId, contextTitle, contextDescription } = useLocalSearchParams<{
+    bookId?: string;
+    contextTitle?: string;
+    contextDescription?: string;
+  }>();
   const { width } = useWindowDimensions();
-  const { book, isLoading, error } = useBookDetail(bookId ?? '');
+  const bookDetail = useBookDetail(bookId ?? '');
+  const magazineContext = useMemo<Book | null>(() => {
+    if (!contextTitle) return null;
+    return {
+      id: `magazine-${contextTitle}`,
+      title: contextTitle,
+      author: '서로서가 편집부',
+      description: contextDescription,
+      colors: ['#D8FF45', '#F7F6E9'],
+      accent: '#34271F',
+      motif: 'lines',
+    };
+  }, [contextDescription, contextTitle]);
+  const book = bookDetail.book ?? magazineContext;
+  const isLoading = Boolean(bookId) && bookDetail.isLoading;
+  const error = bookId ? bookDetail.error : null;
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -155,7 +175,7 @@ export default function AiBookChatScreen() {
                   resizeMode="contain"
                 />
                 <Text style={styles.introTitle}>서로 AI에게</Text>
-                <Text style={styles.introSubtitle}>책에 대해 질문해보세요</Text>
+                <Text style={styles.introSubtitle}>{magazineContext ? '이 매거진에 대해 질문해보세요' : '책에 대해 질문해보세요'}</Text>
 
                 <View style={styles.suggestions}>
                   {suggestions.map((suggestion) => (

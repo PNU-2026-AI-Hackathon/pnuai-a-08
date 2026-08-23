@@ -2,7 +2,9 @@
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth, getReactNativePersistence, initializeAuth } from "@firebase/auth";
+import { getAuth, getReactNativePersistence, initializeAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
 const firebaseConfig = {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
@@ -17,6 +19,10 @@ const firebaseConfig = {
 // Expo의 Fast Refresh 때문에 Firebase 앱이 중복 초기화되는 것을 방지한다.
 export const firebaseApp =
   getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
+
+// 화면에서는 이 객체를 직접 사용하지 않고 services/*Repository 계층을 거칩니다.
+export const db = getFirestore(firebaseApp);
+export const storage = getStorage(firebaseApp);
 
 // React Native에서는 AsyncStorage를 사용하여 로그인 세션을 유지한다.
 // AsyncStorage : 앱을 껐다 켜도 데이터를 저장하는 저장소이다, 여기에 저장된 로그인 세션을 통해 자동 로그인을 유지

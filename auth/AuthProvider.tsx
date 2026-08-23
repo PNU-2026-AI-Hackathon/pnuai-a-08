@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import {
   GoogleAuthProvider,
@@ -21,15 +22,18 @@ import {
 // 이 auth 객체가 로그인한 사용자의 상태 (currentUser , IdToken) 토큰 등을 가지고 있다
 // 즉 한 사용자의 기기에서 한 앱 객체 - 한 인증 정보 객체가 딱 하나씩 존재한다고 생각하면 됨
 import { auth } from "../lib/firebase";
+import { userRepository } from "../services/userRepository";
 
 const GOOGLE_WEB_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 const UNIVERSITY_EMAIL_SUFFIX = ".ac.kr";
+const GUEST_SESSION_KEY = "seoroseoga.auth.guest";
 export const UNIVERSITY_EMAIL_REQUIRED_ERROR =
   "UNIVERSITY_EMAIL_REQUIRED";
 
 type AuthContextValue = { // 이게 프로젝트 전역에서 매 클럭마다 참고하는 전역 컨텍스트
   user: User | null;
+  isGuest: boolean;
   loading: boolean;
 
   signInWithEmail: (email: string, password: string) => Promise<void>;
@@ -37,6 +41,8 @@ type AuthContextValue = { // 이게 프로젝트 전역에서 매 클럭마다 �
   signUpWithEmail: (email: string, password: string) => Promise<void>;
 
   signInWithGoogle: () => Promise<void>;
+
+  continueAsGuest: () => Promise<void>;
 
   signOutUser: () => Promise<void>;
 
@@ -59,6 +65,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // react 의 useState 는 어떤 상태와 그 상태를 변화시키는 함수의 쌍을 반환하는 함수
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isGuest, setIsGuest] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(true);
+
+  useEffect(() => {
+    let isActive = true;
+
+    void AsyncStorage.getItem(GUEST_SESSION_KEY)
+      .then(value => {
+        if (isActive) setIsGuest(value === "true");
+      })
+      .catch(error => {
+        console.warn("게스트 세션 확인 중 오류:", error);
+      })
+      .finally(() => {
+        if (isActive) setGuestLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   // auth 객체를 감시하다가 state 가 바뀌면 바뀐 currentUser 값을 넣은 setUser 을 실행해서 , 전역 user 값을 바꾼다
   //"AuthProvider가 처음 생성되면(앱을 킬때마다 AuthProvider 렌더링 됨 -> 내가 app 폴더 속 파일들을 그렇게 만들거라서) AuthProvider가 사라질 때는 감시를 해제한다."
@@ -70,8 +97,39 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const unsubscribe = onAuthStateChanged(
       auth,
       currentUser => {
+        if (!currentUser) {
+          setUser(null);
+          setLoading(false);
+          // Firebase는 로그아웃이지만 Google 네이티브 계정만 남은
+          // 이전 실패 상태도 앱 시작 시 정리한다.
+          void GoogleSignin.signOut().catch(error => {
+            console.warn("잔류 Google 로그인 세션 정리 중 오류:", error);
+          });
+          return;
+        }
+
+        const email = currentUser.email?.trim().toLowerCase();
+        if (!email?.endsWith(UNIVERSITY_EMAIL_SUFFIX)) {
+          setUser(null);
+          setLoading(false);
+          void signOut(auth).catch(error => {
+            console.warn("잘못 저장된 Firebase 로그인 세션 정리 중 오류:", error);
+          });
+          void GoogleSignin.signOut().catch(error => {
+            console.warn("잘못 저장된 Google 로그인 세션 정리 중 오류:", error);
+          });
+          return;
+        }
+
         setUser(currentUser);
+        setIsGuest(false);
         setLoading(false);
+        void AsyncStorage.removeItem(GUEST_SESSION_KEY).catch(error => {
+          console.warn("게스트 세션 정리 중 오류:", error);
+        });
+        void userRepository.syncAuthenticatedUser(currentUser).catch(error => {
+          console.error("Firestore 사용자 프로필 동기화 실패:", error);
+        });
       },
       error => {
         console.error("인증 상태 확인 실패:", error);
@@ -106,26 +164,70 @@ export function AuthProvider({ children }: AuthProviderProps) {
       throw new Error("Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID.");
     }
 
-    await GoogleSignin.hasPlayServices();
-    const result = await GoogleSignin.signIn();
-    const idToken = result.data?.idToken;
+    try {
+      await GoogleSignin.hasPlayServices();
+      const result = await GoogleSignin.signIn();
+      const idToken = result.data?.idToken;
+      const googleEmail = result.data?.user.email?.trim().toLowerCase();
 
-    if (!idToken) {
-      throw new Error("Google did not return an id token.");
-    }
+      if (!idToken) {
+        throw new Error("Google did not return an id token.");
+      }
 
-    const credential = GoogleAuthProvider.credential(idToken);
-    const userCredential = await signInWithCredential(auth, credential);
-    const email = userCredential.user.email?.toLowerCase();
+      // Firebase에 세션을 저장하기 전에 먼저 학교 계정인지 검사한다.
+      // 실패한 계정이 Firebase AsyncStorage에 잠시라도 저장되는 것을 막는다.
+      if (!googleEmail?.endsWith(UNIVERSITY_EMAIL_SUFFIX)) {
+        throw new Error(UNIVERSITY_EMAIL_REQUIRED_ERROR);
+      }
 
-    if (!email?.endsWith(UNIVERSITY_EMAIL_SUFFIX)) {
-      await signOut(auth);
-      throw new Error(UNIVERSITY_EMAIL_REQUIRED_ERROR);
+      const credential = GoogleAuthProvider.credential(idToken);
+      const userCredential = await signInWithCredential(auth, credential);
+      const firebaseEmail = userCredential.user.email?.trim().toLowerCase();
+
+      if (!firebaseEmail?.endsWith(UNIVERSITY_EMAIL_SUFFIX)) {
+        throw new Error(UNIVERSITY_EMAIL_REQUIRED_ERROR);
+      }
+    } catch (error) {
+      // Google Sign-In의 네이티브 세션은 Metro를 재시작해도 남을 수 있다.
+      // 모든 실패 경로에서 두 세션을 정리해 다음 버튼 입력이 새 로그인을 시작하게 한다.
+      if (auth.currentUser) {
+        await signOut(auth).catch(cleanupError => {
+          console.warn("Firebase 로그인 실패 정리 중 오류:", cleanupError);
+        });
+      }
+      await GoogleSignin.signOut().catch(cleanupError => {
+        console.warn("Google 로그인 실패 정리 중 오류:", cleanupError);
+      });
+      throw error;
     }
   };
 
+  const continueAsGuest = async () => {
+    if (auth.currentUser) {
+      await signOut(auth).catch(error => {
+        console.warn("게스트 전환 중 Firebase 세션 정리 오류:", error);
+      });
+    }
+    await GoogleSignin.signOut().catch(error => {
+      console.warn("게스트 전환 중 Google 세션 정리 오류:", error);
+    });
+
+    setUser(null);
+    setIsGuest(true);
+    await AsyncStorage.setItem(GUEST_SESSION_KEY, "true").catch(error => {
+      console.warn("게스트 세션 저장 중 오류:", error);
+    });
+  };
+
   const signOutUser = async () => {
+    setIsGuest(false);
+    await AsyncStorage.removeItem(GUEST_SESSION_KEY).catch(error => {
+      console.warn("게스트 세션 삭제 중 오류:", error);
+    });
     await signOut(auth);
+    await GoogleSignin.signOut().catch(error => {
+      console.warn("Google 로그아웃 중 오류:", error);
+    });
   };
 
   const getIdToken = async () => {
@@ -139,14 +241,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
-      loading,
+      isGuest,
+      loading: loading || guestLoading,
       signInWithEmail,
       signUpWithEmail,
       signInWithGoogle,
+      continueAsGuest,
       signOutUser,
       getIdToken,
     }),
-    [user, loading]
+    [user, isGuest, loading, guestLoading]
   );
 
   return (

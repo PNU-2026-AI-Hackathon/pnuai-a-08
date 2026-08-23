@@ -11,16 +11,23 @@ export type ChatRoom = {
   otherUser: {
     id: string;
     displayName: string;
+    photoURL?: string;
   };
   book: {
     id: string;
     title: string;
     author: string;
     colors: readonly [string, string];
+    coverUrl?: string;
+  };
+  lendingPlace?: {
+    name: string;
+    address: string;
+    latitude?: number;
+    longitude?: number;
   };
   lastMessage: string;
   lastMessageAt: string;
   unreadCount: number;
   status: ChatRoomStatus;
 };
-

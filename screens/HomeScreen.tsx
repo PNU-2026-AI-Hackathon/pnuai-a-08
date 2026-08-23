@@ -1,19 +1,11 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { BookShelf } from '@/components/BookShelf';
-import { colors, spacing, typography } from '@/constants/theme';
 import { useHomeBooks } from '@/hooks/useHomeBooks';
+import { useUserProfile } from '@/hooks/useUserProfile';
 import { Book } from '@/models/Book';
 
 function SectionHeader({ title, count }: { title: string; count: number }) {
@@ -27,161 +19,133 @@ function SectionHeader({ title, count }: { title: string; count: number }) {
         accessibilityRole="button"
         accessibilityLabel={`${title} 전체보기`}
         hitSlop={10}
-        style={({ pressed }) => [styles.seeAll, pressed && styles.pressed]}
+        style={({ pressed }) => pressed && styles.pressed}
       >
-        <Text style={styles.seeAllText}>전체보기</Text>
-        <Ionicons name="chevron-forward" size={19} color={colors.text} />
+        <Text style={styles.seeAllText}>전체보기 &gt;</Text>
       </Pressable>
     </View>
   );
 }
 
 export default function HomeScreen() {
-  const { width, height } = useWindowDimensions();
-  const { borrowed, owned, isLoading, error, reload } = useHomeBooks();
-  const compact = height < 700;
-  const sidePadding = Math.max(spacing.lg, (width - 540) / 2);
+  const { width } = useWindowDimensions();
+  const { user } = useAuth();
+  const profile = useUserProfile(user?.uid ?? '');
+  const { borrowed, owned, isLoading, error, reload } = useHomeBooks(user?.uid ?? '');
+  const pageWidth = Math.min(width, 620);
+  const nickname = profile?.nickname || user?.displayName?.trim() || user?.email?.split('@')[0] || '게스트';
 
   const openBook = (book: Book) => {
     router.push({ pathname: '/home/[bookId]', params: { bookId: book.id } });
   };
 
+  const openAddBook = () => {
+    if (!user) {
+      router.push('/login');
+      return;
+    }
+    router.push('/add-book');
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <View
-          style={[
-            styles.header,
-            { paddingHorizontal: sidePadding, paddingTop: compact ? spacing.md : spacing.lg },
-          ]}
-        >
-          <View>
-            <Text style={[styles.greeting, width < 360 && styles.greetingSmall]}>안녕하세요! 👋</Text>
-            <Text style={styles.subtitle}>오늘도 좋은 책을 만나보세요.</Text>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="알림"
-            hitSlop={12}
-            style={({ pressed }) => [styles.notification, pressed && styles.pressed]}
-          >
-            <Ionicons name="notifications-outline" size={29} color={colors.text} />
-            <View style={styles.notificationDot} />
-          </Pressable>
-        </View>
+      <View style={[styles.page, { width: pageWidth }]}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+          <Image
+            source={require('../assets/login/seoroseoga-wordmark.png')}
+            style={styles.wordmark}
+            resizeMode="contain"
+            accessibilityRole="image"
+            accessibilityLabel="서로서가"
+          />
 
-        {isLoading ? (
-          <View style={styles.status}>
-            <ActivityIndicator color={colors.accent} size="large" />
+          <View style={styles.libraryTitle}>
+            <Text numberOfLines={1} style={styles.nickname}>{nickname}</Text>
+            <Text style={styles.librarySuffix}>님의 서재</Text>
           </View>
-        ) : error ? (
-          <View style={styles.status}>
-            <Text style={styles.errorText}>{error}</Text>
-            <Pressable accessibilityRole="button" onPress={reload} style={styles.retryButton}>
-              <Text style={styles.retryText}>다시 시도</Text>
-            </Pressable>
-          </View>
-        ) : (
-          <>
-            <View style={[styles.section, compact && styles.sectionCompact]}>
-              <View style={{ paddingHorizontal: sidePadding }}>
+
+          {isLoading ? (
+            <View style={styles.status}>
+              <ActivityIndicator color="#A0B243" size="large" />
+            </View>
+          ) : error ? (
+            <View style={styles.status}>
+              <Text style={styles.errorText}>{error}</Text>
+              <Pressable accessibilityRole="button" onPress={reload} style={styles.retryButton}>
+                <Text style={styles.retryText}>다시 시도</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <>
+              <View style={styles.section}>
                 <SectionHeader title="빌린 책" count={borrowed.length} />
+                <View style={styles.shelfShift}>
+                  <BookShelf books={borrowed} variant="borrowed" onPressBook={openBook} />
+                </View>
               </View>
-              <BookShelf books={borrowed} variant="borrowed" onPressBook={openBook} />
-            </View>
 
-            <View style={[styles.section, styles.myBooksSection, compact && styles.sectionCompact]}>
-              <View style={{ paddingHorizontal: sidePadding }}>
+              <View style={styles.secondSection}>
                 <SectionHeader title="나의 책" count={owned.length} />
+                <View style={styles.shelfShift}>
+                  <BookShelf
+                    books={owned}
+                    variant="owned"
+                    onPressBook={openBook}
+                    onPressAdd={openAddBook}
+                  />
+                </View>
               </View>
-              <BookShelf books={owned} variant="owned" onPressBook={openBook} />
-            </View>
-          </>
-        )}
-      </ScrollView>
+            </>
+          )}
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.background },
-  scroll: { flex: 1 },
-  content: { paddingBottom: spacing.lg },
-  header: {
+  safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
+  page: { flex: 1, alignSelf: 'center', backgroundColor: '#FFFFFF' },
+  content: { paddingBottom: 106 },
+  wordmark: { width: 117, height: 25, alignSelf: 'center', marginTop: 25 },
+  libraryTitle: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
+    alignItems: 'baseline',
+    paddingHorizontal: 38,
+    marginTop: 39,
   },
-  greeting: {
-    color: colors.text,
-    fontSize: typography.greeting,
-    lineHeight: 46,
-    fontWeight: '900',
-    letterSpacing: -1.2,
-  },
-  greetingSmall: { fontSize: 31 },
-  subtitle: {
-    color: colors.textMuted,
-    fontSize: typography.subtitle,
-    marginTop: spacing.sm,
-    letterSpacing: -0.3,
-  },
-  notification: {
-    marginTop: 6,
-    width: 42,
-    height: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  notificationDot: {
-    position: 'absolute',
-    right: 7,
-    top: 5,
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: colors.accent,
-    borderWidth: 1.5,
-    borderColor: colors.background,
-  },
-  section: { marginTop: spacing.xxl },
-  sectionCompact: { marginTop: spacing.xl },
-  myBooksSection: { marginTop: spacing.xl },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.lg,
-  },
-  sectionHeading: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.md },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: typography.title,
+  nickname: {
+    maxWidth: '65%',
+    color: '#A0B243',
+    fontSize: 22,
+    lineHeight: 27,
     fontWeight: '900',
     letterSpacing: -0.8,
   },
-  count: { color: colors.textMuted, fontSize: typography.subtitle, fontWeight: '600' },
-  seeAll: { flexDirection: 'row', alignItems: 'center', gap: 1 },
-  seeAllText: { color: colors.text, fontSize: typography.body, fontWeight: '600' },
-  pressed: { opacity: 0.55 },
-  status: {
-    minHeight: 320,
+  librarySuffix: {
+    color: '#5D442D',
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '700',
+  },
+  section: { marginTop: 8 },
+  secondSection: { marginTop: 23 },
+  sectionHeader: {
+    height: 28,
+    zIndex: 5,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: spacing.lg,
-    gap: spacing.md,
+    justifyContent: 'space-between',
+    paddingHorizontal: 38,
   },
-  errorText: { color: colors.textMuted, fontSize: typography.body },
-  retryButton: {
-    borderRadius: 999,
-    backgroundColor: colors.accent,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-  },
-  retryText: { color: colors.text, fontWeight: '800' },
+  sectionHeading: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
+  sectionTitle: { color: '#151310', fontSize: 14, lineHeight: 22, fontWeight: '800' },
+  count: { color: '#A0B243', fontSize: 14, lineHeight: 22, fontWeight: '700' },
+  seeAllText: { color: '#5D442D', fontSize: 14, lineHeight: 26, fontWeight: '700' },
+  shelfShift: { marginTop: -24 },
+  pressed: { opacity: 0.55 },
+  status: { minHeight: 520, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  errorText: { color: '#746E69', fontSize: 14 },
+  retryButton: { borderRadius: 999, backgroundColor: '#D8FF45', paddingHorizontal: 20, paddingVertical: 9 },
+  retryText: { color: '#34271F', fontWeight: '800' },
 });
-

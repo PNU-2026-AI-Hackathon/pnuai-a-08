@@ -14,6 +14,10 @@ const localCovers: Record<string, ImageSourcePropType> = {
 export function BookDetailCover({ book, width }: { book: Book; width: number }) {
   const localCover = localCovers[book.id];
 
+  if (book.coverUrl) {
+    return <Image source={{ uri: book.coverUrl }} resizeMode="cover" style={[styles.cover, { width }]} />;
+  }
+
   if (localCover) {
     return <Image source={localCover} resizeMode="cover" style={[styles.cover, { width }]} />;
   }
@@ -87,4 +91,3 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.18)',
   },
 });
-

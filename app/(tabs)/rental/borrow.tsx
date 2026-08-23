@@ -18,15 +18,18 @@ import { AvailableBookCarousel } from '@/components/AvailableBookCarousel';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useAvailableBooks } from '@/hooks/useAvailableBooks';
 import { AvailableBook } from '@/models/AvailableBook';
+import { rentalRepository } from '@/services/rentalRepository';
 
 export default function BorrowBrowseScreen() {
   const { width, height } = useWindowDimensions();
   const { user } = useAuth();
   const { books, isLoading, error } = useAvailableBooks(user?.uid ?? 'guest');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [isRequesting, setIsRequesting] = useState(false);
   const pageWidth = Math.min(width, 620);
   const cardWidth = Math.min(pageWidth * 0.6, Math.max(184, (height - 390) * 0.68), 250);
   const selectedBook = books[selectedIndex];
+  const isOwnBook = Boolean(user && selectedBook?.ownerId === user.uid);
   const place = useMemo(
     () => selectedBook?.lendingPlace ?? books[0]?.lendingPlace,
     [books, selectedBook],
@@ -37,14 +40,27 @@ export default function BorrowBrowseScreen() {
     Alert.alert(book.title, '책 상세 정보 화면은 다음 단계에서 연결할게요.');
   };
 
-  const handleRentalRequest = () => {
-    if (!selectedBook) return;
-
-    // Firestore 연결 시 bookId/ownerId/requesterId로 대여 신청과 채팅방을 생성합니다.
-    Alert.alert(
-      '대여 신청 준비 완료',
-      `${selectedBook.ownerDisplayName}님의 「${selectedBook.title}」을 선택했어요.\n채팅방 생성은 다음 단계에서 연결할게요.`,
-    );
+  const handleRentalRequest = async () => {
+    if (!selectedBook || isRequesting) return;
+    if (!user) {
+      Alert.alert('로그인이 필요해요', '책을 빌리려면 부산대학교 계정으로 로그인해주세요.');
+      return;
+    }
+    if (selectedBook.ownerId === user.uid) {
+      Alert.alert('내가 등록한 책이에요', '다른 사용자는 이 책을 확인하고 대여를 신청할 수 있어요.');
+      return;
+    }
+    setIsRequesting(true);
+    try {
+      await rentalRepository.createLoanRequest({ bookId: selectedBook.id, borrowerId: user.uid });
+      Alert.alert('대여 신청 완료', `${selectedBook.ownerDisplayName}님에게 신청을 보냈어요.`);
+      router.replace('/(tabs)/community');
+    } catch (requestError) {
+      console.error('대여 신청 실패:', requestError);
+      Alert.alert('대여 신청 실패', '책 상태를 다시 확인한 뒤 시도해 주세요.');
+    } finally {
+      setIsRequesting(false);
+    }
   };
 
   return (
@@ -129,12 +145,18 @@ export default function BorrowBrowseScreen() {
               accessibilityRole="button"
               accessibilityLabel={`${selectedBook?.title ?? '선택한 책'} 대여 신청하기`}
               onPress={handleRentalRequest}
+              disabled={isRequesting || isOwnBook}
               style={({ pressed }) => [
                 styles.requestButton,
+                isOwnBook && styles.requestButtonDisabled,
                 pressed && styles.requestButtonPressed,
               ]}
             >
-              <Text style={styles.requestButtonText}>대여 신청하기</Text>
+              {isRequesting ? (
+                <ActivityIndicator color={colors.text} />
+              ) : (
+                <Text style={styles.requestButtonText}>{isOwnBook ? '내가 등록한 책이에요' : '대여 신청하기'}</Text>
+              )}
             </Pressable>
           </View>
         )}
@@ -208,6 +230,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   requestButtonPressed: { opacity: 0.75, transform: [{ scale: 0.99 }] },
+  requestButtonDisabled: { backgroundColor: '#D9D9D1', shadowOpacity: 0, elevation: 0 },
   requestButtonText: { color: colors.text, fontSize: typography.body, fontWeight: '900' },
   status: {
     flex: 1,
@@ -219,4 +242,3 @@ const styles = StyleSheet.create({
   statusText: { color: colors.textMuted, fontSize: typography.body, textAlign: 'center' },
   pressed: { opacity: 0.55 },
 });
-

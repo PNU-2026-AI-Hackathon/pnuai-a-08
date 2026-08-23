@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Redirect, Tabs } from 'expo-router';
-import { ActivityIndicator, Platform, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
 import { colors } from '@/constants/theme';
@@ -14,7 +15,9 @@ const tabIcons: Record<string, keyof typeof Ionicons.glyphMap> = {
 };
 
 export default function TabLayout() {
-  const { user, loading } = useAuth();
+  const { user, isGuest, loading } = useAuth();
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(10, insets.bottom);
 
   if (loading) {
     return (
@@ -24,7 +27,7 @@ export default function TabLayout() {
     );
   }
 
-  if (!user) {
+  if (!user && !isGuest) {
     return <Redirect href="/login" />;
   }
 
@@ -41,9 +44,9 @@ export default function TabLayout() {
           marginTop: 2,
         },
         tabBarStyle: {
-          height: Platform.select({ ios: 84, default: 72 }),
+          height: 62 + bottomInset,
           paddingTop: 8,
-          paddingBottom: Platform.select({ ios: 22, default: 10 }),
+          paddingBottom: bottomInset,
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
           borderTopWidth: 1,

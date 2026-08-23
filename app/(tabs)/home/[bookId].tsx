@@ -27,6 +27,16 @@ function getDueLabel(dueDate: string) {
   return remainingDays === 0 ? '오늘 반납' : `반납까지 ${remainingDays}일 남음`;
 }
 
+function getRentalLabel(status: string | undefined, rentalStartsAt: string | undefined, dueDate: string | undefined) {
+  if (status === 'RESERVED' && rentalStartsAt) {
+    const difference = new Date(rentalStartsAt).getTime() - Date.now();
+    if (difference < -86_400_000) return '대여 확인 대기';
+    const days = Math.max(0, Math.ceil(difference / 86_400_000));
+    return days === 0 ? '오늘 대여 예정' : `${days}일 후 대여 예정`;
+  }
+  return dueDate ? getDueLabel(dueDate) : null;
+}
+
 export default function BookDetailScreen() {
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
   const { width } = useWindowDimensions();
@@ -85,9 +95,9 @@ export default function BookDetailScreen() {
             <View style={styles.bookInfo}>
               <Text style={styles.title}>{book.title.replace('\n', ' ')}</Text>
               <Text style={styles.author}>{book.author}</Text>
-              {book.dueDate ? (
+              {getRentalLabel(book.status, book.rentalStartsAt, book.dueDate) ? (
                 <View style={styles.dueBadge}>
-                  <Text style={styles.dueText}>{getDueLabel(book.dueDate)}</Text>
+                  <Text style={styles.dueText}>{getRentalLabel(book.status, book.rentalStartsAt, book.dueDate)}</Text>
                 </View>
               ) : null}
             </View>

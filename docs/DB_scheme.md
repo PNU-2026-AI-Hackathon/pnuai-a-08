@@ -46,7 +46,7 @@ JSON
   "ownerId": "user_my_uid_123",          // 책을 등록한 사용자 UID
   "isLendable": false,                   // true: 대여 가능으로 등록 / false: 혼자 보는 개인 소장용
   "borrowerId": null,                    // 빌려간 사람 UID (빌려준 적 없으면 null)
-  "status": "PRIVATE",                   // "PRIVATE"(개인소장), "AVAILABLE"(대여가능), "BORROWED"(대여중)
+  "status": "PRIVATE",                   // "PRIVATE" | "AVAILABLE" | "RESERVED"(대여예정) | "BORROWED"
 
   "createdAt": "2026-02-18T12:00:00Z"    // 등록일자
 }
@@ -296,11 +296,27 @@ Firestore transaction 또는 Callable Cloud Function으로 아래 변경을 원�
   "messageId": "message_abc123",
   "senderId": "user_owner_uid",
   "type": "TEXT",
-  // "TEXT" | "SYSTEM"
+  // "TEXT" | "MEETING" | "SYSTEM"
   "text": "내일 오후 3시에 만나요!",
   "createdAt": "Firestore Timestamp"
 }
 ```
+
+`type == "MEETING"`인 메시지는 다음 `meeting` 객체를 추가합니다.
+
+```json
+{
+  "meeting": {
+    "loanAt": "Firestore Timestamp",
+    "loanPlace": { "name": "운죽정", "address": "...", "latitude": 35.0, "longitude": 129.0 },
+    "returnAt": "Firestore Timestamp",
+    "returnPlace": { "name": "운죽정", "address": "...", "latitude": 35.0, "longitude": 129.0 },
+    "status": "PROPOSED"
+  }
+}
+```
+
+상대방이 수락하면 메시지의 `meeting.status`는 `ACCEPTED`가 되고, `loanRequests.status = SCHEDULED`, `books.status = RESERVED`로 함께 전이합니다. 실제 책 전달 확인 후에만 두 문서를 `BORROWED`로 전이합니다.
 
 - 메시지 생성자는 `senderId == request.auth.uid`여야 합니다.
 - 발신자는 해당 채팅방의 `participantIds`에 포함되어야 합니다.

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 
 import { AvailableBook } from '@/models/AvailableBook';
 import { rentalRepository } from '@/services/rentalRepository';
@@ -8,10 +9,10 @@ export function useAvailableBooks(currentUserId: string) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     let isActive = true;
 
-    const load = async () => {
+    const fetchBooks = async () => {
       setIsLoading(true);
       setError(null);
 
@@ -25,12 +26,13 @@ export function useAvailableBooks(currentUserId: string) {
       }
     };
 
-    void load();
+    void fetchBooks();
     return () => {
       isActive = false;
     };
   }, [currentUserId]);
 
-  return { books, isLoading, error };
-}
+  useFocusEffect(load);
 
+  return { books, isLoading, error, reload: load };
+}

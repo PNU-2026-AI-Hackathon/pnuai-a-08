@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { Alert, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { colors, spacing, typography } from '@/constants/theme';
@@ -56,8 +56,8 @@ export default function RentalScreen() {
             <RentalAction
               label="빌려줄래요"
               color={colors.secondaryAccent}
-              accessibilityHint="책 대여 등록 기능은 준비 중입니다"
-              onPress={() => Alert.alert('빌려줄래요', '책 대여 등록 화면은 준비 중이에요.')}
+              accessibilityHint="빌려줄 책 등록 화면으로 이동합니다"
+              onPress={() => router.push('/rental/lend')}
             />
           </View>
         </View>
@@ -100,4 +100,3 @@ const styles = StyleSheet.create({
     letterSpacing: -0.8,
   },
 });
-

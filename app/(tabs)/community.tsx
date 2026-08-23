@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import {
   ActivityIndicator,
-  Alert,
   FlatList,
   Image,
   StyleSheet,
@@ -11,22 +11,21 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { ChatRoomRow } from '@/components/ChatRoomRow';
 import { colors, spacing, typography } from '@/constants/theme';
 import { useChatRooms } from '@/hooks/useChatRooms';
 import { ChatRoom } from '@/models/ChatRoom';
 
-const CURRENT_USER_ID = 'current-user';
-
 export default function CommunityScreen() {
   const { width } = useWindowDimensions();
-  const { rooms, isLoading, error } = useChatRooms(CURRENT_USER_ID);
+  const { user } = useAuth();
+  const { rooms, isLoading, error } = useChatRooms(user?.uid ?? '');
   const contentWidth = Math.min(width, 620);
   const horizontalPadding = width < 360 ? spacing.md : spacing.lg;
 
   const handleRoomPress = (room: ChatRoom) => {
-    // 채팅 화면 구현 시 이 한 곳을 router.push(`/chats/${room.id}`)로 교체합니다.
-    Alert.alert(room.book.title, `${room.otherUser.displayName}님과의 채팅 화면은 준비 중이에요.`);
+    router.push({ pathname: '/chat/[roomId]', params: { roomId: room.id } });
   };
 
   return (
@@ -73,7 +72,7 @@ export default function CommunityScreen() {
                 </View>
                 <Text style={styles.emptyTitle}>아직 시작된 대화가 없어요.</Text>
                 <Text style={styles.statusText}>
-                  대여 신청이 수락되면 이곳에 채팅방이 만들어져요.
+                  대여를 신청하면 이곳에 채팅방이 만들어져요.
                 </Text>
               </View>
             }

@@ -5,7 +5,7 @@ import { useAuth } from '@/auth/AuthProvider';
 import { colors } from '@/constants/theme';
 
 export default function Index() {
-  const { user, loading } = useAuth();
+  const { user, isGuest, loading } = useAuth();
 
   if (loading) {
     return (
@@ -15,7 +15,7 @@ export default function Index() {
     );
   }
 
-  return <Redirect href={user ? '/(tabs)/home' : '/login'} />;
+  return <Redirect href={user || isGuest ? '/(tabs)/home' : '/login'} />;
 }
 
 const styles = StyleSheet.create({
@@ -26,4 +26,3 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
 });
-

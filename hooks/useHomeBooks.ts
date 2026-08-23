@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 
 import { bookRepository, HomeBooks } from '@/services/bookRepository';
 
@@ -7,7 +8,7 @@ const emptyBooks: HomeBooks = {
   owned: [],
 };
 
-export function useHomeBooks() {
+export function useHomeBooks(userId: string) {
   const [books, setBooks] = useState<HomeBooks>(emptyBooks);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -17,17 +18,19 @@ export function useHomeBooks() {
     setError(null);
 
     try {
-      setBooks(await bookRepository.getHomeBooks());
+      setBooks(await bookRepository.getHomeBooks(userId));
     } catch {
       setError('책 정보를 불러오지 못했어요.');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [userId]);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   return {
     ...books,
@@ -36,4 +39,3 @@ export function useHomeBooks() {
     reload: load,
   };
 }
-

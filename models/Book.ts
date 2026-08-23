@@ -11,6 +11,16 @@ export type Book = {
   colors: readonly [string, string, ...string[]];
   accent: string;
   dueDate?: string;
+  rentalStartsAt?: string;
   motif: BookCoverMotif;
+  ownerId?: string;
+  borrowerId?: string | null;
+  publisher?: string;
+  publishedDate?: string;
+  isbn?: string;
+  coverUrl?: string;
+  coverStoragePath?: string;
+  description?: string;
+  isLendable?: boolean;
+  status?: 'PRIVATE' | 'AVAILABLE' | 'RESERVED' | 'BORROWED';
 };
-
