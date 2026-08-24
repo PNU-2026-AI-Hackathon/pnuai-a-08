@@ -225,15 +225,22 @@ export default function LendBookScreen() {
               <Field label="출판사" value={publisher} onChangeText={setPublisher} placeholder="출판사를 입력하세요." />
               <View style={styles.field}>
                 <Text style={styles.fieldLabel}>출간일</Text>
-                <Pressable onPress={() => setCalendarOpen((current) => !current)} style={styles.dateInput}>
-                  <Text style={[styles.dateText, !publishedDate && styles.placeholder]}>
-                    {publishedDate ? formatPublishedDate(publishedDate) : '출간일을 선택하세요.'}
+                <Pressable
+                  onPress={() => {
+                    if (!calendarOpen && !publishedDate) setPublishedDate(new Date());
+                    setCalendarOpen((current) => !current);
+                  }}
+                  style={[styles.dateInput, (calendarOpen || publishedDate) && styles.dateInputSelected]}
+                >
+                  <Text style={[styles.dateLabel, (calendarOpen || publishedDate) && styles.dateLabelSelected]}>출간일</Text>
+                  <Text numberOfLines={1} style={[styles.dateText, !publishedDate && styles.placeholder, (calendarOpen || publishedDate) && styles.dateTextSelected]}>
+                    {publishedDate ? formatPublishedDate(publishedDate) : '선택'}
                   </Text>
-                  <Ionicons name="calendar-outline" size={18} color="#7A8B26" />
+                  <Ionicons name="chevron-down" size={20} color={calendarOpen || publishedDate ? '#B7D52C' : '#555'} />
                 </Pressable>
               </View>
               {calendarOpen ? (
-                <PublishedDatePicker selected={publishedDate} onSelect={(date) => { setPublishedDate(date); setCalendarOpen(false); }} />
+                <PublishedDatePicker selected={publishedDate} onSelect={setPublishedDate} />
               ) : null}
               <View style={styles.notice}>
                 <Text style={styles.noticeText}>등록 후 대여 가능 사용자가 검색할 수 있어요.</Text>
@@ -302,8 +309,12 @@ const styles = StyleSheet.create({
   field: { marginTop: 11 },
   fieldLabel: { color: '#151310', fontSize: 15, lineHeight: 26, fontWeight: '800', marginBottom: 6, marginLeft: 6 },
   input: { width: '100%', height: 42, borderWidth: 1, borderColor: 'rgba(0,0,0,0.5)', borderRadius: 7, paddingHorizontal: 9, paddingVertical: 0, color: '#312A25', fontSize: 14 },
-  dateInput: { width: '100%', height: 42, borderWidth: 1, borderColor: '#7F7F7F', borderRadius: 7, paddingHorizontal: 9, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  dateText: { color: '#312A25', fontSize: 14 },
+  dateInput: { width: '100%', height: 45, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.5)', borderRadius: 10, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center' },
+  dateInputSelected: { borderColor: '#B7D52C' },
+  dateLabel: { color: '#555555', fontSize: 14, fontWeight: '700' },
+  dateLabelSelected: { color: '#A0B243' },
+  dateText: { flex: 1, marginLeft: 10, color: '#555555', fontSize: 14, fontWeight: '600', textAlign: 'right' },
+  dateTextSelected: { color: '#B7D52C' },
   placeholder: { color: '#85818A' },
   notice: { height: 42, justifyContent: 'center', marginTop: 16, paddingHorizontal: 16, borderRadius: 12, backgroundColor: '#F7F5EB' },
   noticeText: { color: '#706659', fontSize: 13 },
