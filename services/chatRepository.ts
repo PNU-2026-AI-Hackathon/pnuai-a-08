@@ -306,7 +306,13 @@ class FirestoreChatRepository implements ChatRepository {
           return {
             id: message.id,
             senderId: typeof data.senderId === 'string' ? data.senderId : '',
-            type: data.type === 'MEETING' ? 'MEETING' : data.type === 'IMAGE' ? 'IMAGE' : 'TEXT',
+            type: data.type === 'MEETING'
+              ? 'MEETING'
+              : data.type === 'MEETING_ACCEPTED'
+                ? 'MEETING_ACCEPTED'
+                : data.type === 'IMAGE'
+                  ? 'IMAGE'
+                  : 'TEXT',
             text: typeof data.text === 'string' ? data.text : '',
             createdAt: toIsoString(data.createdAt) ?? new Date().toISOString(),
             meeting: meetingData ? {
@@ -361,7 +367,7 @@ class FirestoreChatRepository implements ChatRepository {
         messageId: messageReference.id,
         senderId,
         type: 'MEETING',
-        text: '약속을 만들었어요',
+        text: '대여 약속을 신청했어요',
         meeting: {
           loanAt,
           loanPlace,
@@ -372,7 +378,7 @@ class FirestoreChatRepository implements ChatRepository {
         createdAt: serverTimestamp(),
       });
       transaction.update(roomReference, {
-        lastMessage: '약속을 만들었어요',
+        lastMessage: '대여 약속을 신청했어요',
         lastMessageSenderId: senderId,
         lastMessageAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -384,6 +390,7 @@ class FirestoreChatRepository implements ChatRepository {
   async acceptMeetingProposal(roomId: string, messageId: string, userId: string): Promise<void> {
     const roomReference = doc(db, 'chatRooms', roomId);
     const messageReference = doc(roomReference, 'messages', messageId);
+    const acceptedMessageReference = doc(roomReference, 'messages', `${messageId}_accepted`);
 
     await runTransaction(db, async (transaction) => {
       const [room, message] = await Promise.all([
@@ -420,6 +427,23 @@ class FirestoreChatRepository implements ChatRepository {
         'meeting.acceptedBy': userId,
         'meeting.acceptedAt': serverTimestamp(),
       });
+      transaction.set(acceptedMessageReference, {
+        messageId: acceptedMessageReference.id,
+        senderId: 'SYSTEM',
+        type: 'MEETING_ACCEPTED',
+        text: '약속이 수락됐습니다.',
+        meeting: {
+          loanAt: meeting.loanAt,
+          loanPlace: meeting.loanPlace,
+          returnAt: meeting.returnAt,
+          returnPlace: meeting.returnPlace,
+          status: 'ACCEPTED',
+          acceptedBy: userId,
+          acceptedAt: serverTimestamp(),
+        },
+        sourceMeetingMessageId: messageId,
+        createdAt: serverTimestamp(),
+      });
       transaction.update(requestReference, {
         status: 'SCHEDULED',
         meetingMessageId: messageId,
@@ -442,7 +466,7 @@ class FirestoreChatRepository implements ChatRepository {
       });
       transaction.update(roomReference, {
         status: 'SCHEDULED',
-        lastMessage: '대여 약속이 성사됐어요',
+        lastMessage: '약속이 수락됐습니다.',
         lastMessageSenderId: userId,
         lastMessageAt: serverTimestamp(),
         updatedAt: serverTimestamp(),

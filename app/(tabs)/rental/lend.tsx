@@ -24,6 +24,7 @@ import { useLentBooks } from '@/hooks/useLentBooks';
 import { MeetingPlace } from '@/models/ChatMessage';
 import { LentBook, LentBookStatus } from '@/models/LentBook';
 import { bookRepository } from '@/services/bookRepository';
+import { formatReturnDday } from '@/utils/rentalDate';
 
 type Mode = 'register' | 'list';
 
@@ -78,13 +79,6 @@ function timeAgo(value?: string) {
   return `${Math.floor(hours / 24)}일 전`;
 }
 
-function dueDescription(value?: string) {
-  if (!value) return '대여 기간 확인 중';
-  const date = new Date(value);
-  const days = Math.max(0, Math.ceil((date.getTime() - Date.now()) / 86_400_000));
-  return `${date.getMonth() + 1}월 ${date.getDate()}일까지 · ${days}일 남음`;
-}
-
 const statusConfig: Record<LentBookStatus, { label: string; color: string; background: string }> = {
   AVAILABLE: { label: '대여 가능', color: '#7A8B26', background: '#F7FAE8' },
   REQUESTED: { label: '요청 대기', color: '#D99116', background: '#FFFCF5' },
@@ -99,7 +93,7 @@ function LendingCard({ book }: { book: LentBook }) {
     : book.status === 'SCHEDULED'
       ? '약속이 성사됐어요'
     : book.status === 'BORROWED'
-      ? dueDescription(book.dueAt)
+      ? `대여중 · ${formatReturnDday(book.dueAt)}`
       : '대여 신청을 기다리고 있어요';
 
   return (

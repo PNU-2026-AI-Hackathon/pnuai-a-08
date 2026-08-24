@@ -12,6 +12,7 @@ import { useBorrowedRentals } from '@/hooks/useBorrowedRentals';
 import { AvailableBook, LocalBookCover } from '@/models/AvailableBook';
 import { BorrowedRental } from '@/models/BorrowedRental';
 import { rentalRepository } from '@/services/rentalRepository';
+import { formatReturnDday } from '@/utils/rentalDate';
 
 type SearchFilter = 'ALL' | 'AVAILABLE';
 type BorrowMode = 'BROWSE' | 'LIST';
@@ -113,6 +114,7 @@ function maskStudentNumber(value?: string) {
 
 function RentalListCard({ rental }: { rental: BorrowedRental }) {
   const returned = rental.status === 'RETURNED';
+  const scheduled = rental.status === 'SCHEDULED';
   const statusDate = returned ? rental.returnedAt ?? rental.dueAt : rental.dueAt;
   const details = [rental.book.publisher, rental.book.author, rental.book.publishedYear].filter(Boolean).join('•');
   const maskedStudentNumber = maskStudentNumber(rental.owner.studentNumber);
@@ -122,13 +124,17 @@ function RentalListCard({ rental }: { rental: BorrowedRental }) {
 
   return (
     <Pressable
-      accessibilityLabel={`${rental.book.title} ${returned ? '반납 완료' : '대여 중'}`}
+      accessibilityLabel={`${rental.book.title} ${returned ? '반납 완료' : scheduled ? '대여 예정' : '대여 중'}`}
       onPress={() => rental.chatRoomId && router.push({ pathname: '/chat/[roomId]', params: { roomId: rental.chatRoomId } })}
       style={({ pressed }) => [styles.rentalCard, pressed && styles.pressed]}
     >
       <View style={[styles.rentalStatus, returned && styles.rentalStatusReturned]}>
         <Text numberOfLines={1} style={[styles.rentalStatusText, returned && styles.rentalStatusTextReturned]}>
-          {returned ? '반납 완료' : '대여중'} · {formatDate(statusDate)} 반납
+          {returned
+            ? `반납 완료 · ${formatDate(statusDate)} 반납`
+            : scheduled
+              ? `대여 예정 · ${formatDate(rental.startedAt)} 대여`
+              : `대여중 · ${formatReturnDday(rental.dueAt)}`}
         </Text>
         <Text style={[styles.rentalModeText, returned && styles.rentalModeTextReturned]}>빌릴래요</Text>
       </View>

@@ -52,7 +52,7 @@ Google 로그인 상태가 복원되면 `.ac.kr` 사용자의 프로필을 `merg
 
 `빌릴래요` 둘러보기는 `books.isLendable == true`를 조회하고 캐러셀에는 `status == AVAILABLE`인 실제 문서만 표시합니다. 검색은 책 제목을 기준으로 클라이언트 필터링하며, `전체`에서는 `AVAILABLE | RESERVED | BORROWED`, `대여 가능`에서는 `AVAILABLE`만 표시합니다. 등록자 본인 화면에도 확인용으로 노출하되 대여 신청 버튼은 비활성화하며, repository transaction에서도 자기 책 신청을 거부합니다. 화면에 다시 진입할 때마다 Firestore를 재조회합니다.
 
-`빌릴래요 > 대여 목록`은 목데이터 없이 `loanRequests.borrowerId == uid`를 조회합니다. `BORROWED`는 `대여중 · YYYY.MM.DD 반납`, `RETURNED | COMPLETED`는 `반납 완료 · YYYY.MM.DD 반납`으로 표시하고 `loanAt` 기준 날짜별로 묶습니다. 책과 대여자 정보는 `books`, `users`를 조합하며, 삭제된 책은 `chatRooms.bookSnapshot`을 fallback으로 사용합니다.
+`빌릴래요 > 대여 목록`은 목데이터 없이 `loanRequests.borrowerId == uid`를 조회합니다. `SCHEDULED`는 대여 예정일, `BORROWED`는 `대여중 · 반납 D-N`, `RETURNED | COMPLETED`는 `반납 완료 · YYYY.MM.DD 반납`으로 표시하고 `loanAt` 기준 날짜별로 묶습니다. 책과 대여자 정보는 `books`, `users`를 조합하며, 삭제된 책은 `chatRooms.bookSnapshot`을 fallback으로 사용합니다.
 
 검색 결과의 대여 가능한 책을 선택하면 정규화한 동일 제목의 `AVAILABLE` 문서를 소유자별로 하나씩 묶어 대여 가능 사용자 목록을 만듭니다. 사용자는 최대 3명을 선택할 수 있고, `createLoanRequests(bookIds, borrowerId)`가 선택된 모든 책과 중복 잠금 문서를 하나의 Firestore transaction에서 검증한 후 요청별 `loanRequests`와 `chatRooms`를 각각 생성합니다. 따라서 3명을 선택하면 독립된 신청 3건과 1:1 채팅방 3개가 만들어집니다.
 
@@ -99,22 +99,22 @@ Storage 활성화 후 표지 이미지는 `book-covers/{uid}/{fileName}`에 저�
 
 홈의 `나의 책 > 전체보기`는 `books.ownerId == uid`와 `records.userId == uid`를 조합해 나의 기록을 구성합니다. `records.startedAt` 기준 월별로 묶고, 기록이 없는 기존 책은 `books.createdAt`을 기준으로 표시합니다. 읽는 중 진행률은 `round(records.currentPage / books.totalPages * 100)`으로 계산하고 완독은 `records.status == COMPLETED`를 사용합니다. 목데이터는 사용하지 않습니다.
 
-홈의 `빌린 책 > 전체보기`는 `loanRequests.borrowerId == uid && status == BORROWED`인 실제 대여만 `loanAt` 기준 월별 책장으로 표시합니다. 상태 배지는 `대여중`으로 표시하고 책을 누르면 해당 요청의 `chatRoomId`로 이동해 기존 대여 목록과 동일한 채팅 및 약속 정보를 확인합니다. 반납 완료 내역은 홈 책장에서 제외하고 `빌릴래요 > 대여 목록` 및 마이페이지 `대여 내역`에서 조회합니다.
+홈의 `빌린 책 > 전체보기`는 `loanRequests.borrowerId == uid` 중 `SCHEDULED | ACCEPTED | BORROWED`인 활성 대여를 `loanAt` 기준 월별 책장으로 표시합니다. 약속 수락 후 시작 시각 전인 `SCHEDULED`는 `대여 예정`, 시작 시각이 지난 `BORROWED`는 `대여중 · 반납 D-N`으로 표시합니다. 책을 누르면 해당 요청의 `chatRoomId`로 이동해 기존 대여 목록과 동일한 채팅 및 약속 정보를 확인합니다. 반납 완료 내역은 홈 책장에서 제외하고 `빌릴래요 > 대여 목록` 및 마이페이지 `대여 내역`에서 조회합니다.
 
 Security Rules에서는 `records.userId == request.auth.uid`인 문서만 생성·조회·수정하도록 제한해야 하며, `bookId`가 실제 `books` 문서를 가리키는지 검증해야 합니다.
 
 ### `loanRequests/{requestId}` 및 `chatRooms/{requestId}`
 
-대여 신청 시 신청 문서와 동일 ID의 채팅방을 transaction으로 만듭니다. 현재 프론트는 신청 생성까지만 수행하며, 수락/거절/반납 상태 변경은 백엔드 작업으로 남깁니다.
+대여 신청 시 신청 문서와 동일 ID의 채팅방을 transaction으로 만들고, 약속 수락 및 시작일 도래에 따른 상태 전이도 연관 문서를 함께 갱신하는 transaction으로 처리합니다. 거절·취소·반납 완료는 운영용 백엔드 작업으로 남깁니다.
 
-마이페이지 대여 내역은 `loanRequests.borrowerId == uid`와 `loanRequests.ownerId == uid`를 각각 조회하고 `status`가 `RETURNED | COMPLETED`인 실제 문서만 표시합니다. 책과 상대 사용자 정보는 `books`, `users`에서 조합하며 책 문서가 없으면 `chatRooms.bookSnapshot`을 fallback으로 사용합니다. 목데이터는 사용하지 않습니다.
+마이페이지 대여 내역은 `빌려준 책 / 빌린 책` 상단 옵션으로 역할을 전환합니다. `loanRequests.ownerId == uid`는 빌려준 책, `loanRequests.borrowerId == uid`는 빌린 책으로 분리하고 `status`가 `SCHEDULED | BORROWED | RETURNED | COMPLETED`인 실제 문서를 표시합니다. `SCHEDULED`는 `loanAt` 기준 `대여 예정`, `BORROWED`는 `대여중 · 반납 D-N`, 완료 상태는 `returnedAt` 기준 `반납 완료`로 정렬하며 항목을 누르면 해당 채팅방으로 이동합니다. 책과 상대 사용자 정보는 `books`, `users`에서 조합하며 책 문서가 없으면 `chatRooms.bookSnapshot`을 fallback으로 사용합니다. 목데이터는 사용하지 않습니다.
 
 ### `chatRooms/{chatRoomId}/messages/{messageId}`
 
 메시지 작성과 상위 채팅방의 `lastMessage*` 갱신을 하나의 Firestore transaction으로 수행합니다.
 
 - `TEXT`: `senderId`, `text`, `createdAt`
-- `MEETING`: `senderId`, `text: 약속을 만들었어요`, `createdAt`, `meeting`
+- `MEETING`: `senderId`, `text: 대여 약속을 신청했어요`, `createdAt`, `meeting`
 - `IMAGE`: `senderId`, `text: 사진을 보냈어요`, `createdAt`, `image`
 - `image`: `downloadUrl`, `storagePath`, `mimeType`, `width?`, `height?`, `byteSize?`
 - `meeting.loanAt`, `meeting.returnAt`: Firestore Timestamp
@@ -127,10 +127,15 @@ Security Rules에서는 `records.userId == request.auth.uid`인 문서만 생성
 - `loanRequests`: `status = SCHEDULED`, `meetingMessageId`, `loanAt`, `dueAt`, `lendingPlace`, `returnPlace`
 - `books`: `status = RESERVED`, `borrowerId`, `reservedRequestId`, `loanAt`, `dueAt`
 - `chatRooms`: `status = SCHEDULED`, `lastMessage = 대여 약속이 성사됐어요`
+- `chatRooms/{roomId}/messages/{meetingMessageId}_accepted`: `type = MEETING_ACCEPTED`, `text = 약속이 수락됐습니다.`, 수락된 `loanAt`, `returnAt`, `loanPlace`, `returnPlace` snapshot
 
-`books.borrowerId`가 설정되므로 수락 직후 대여자는 홈의 빌린 책에서 실제 문서를 조회할 수 있습니다. `RESERVED` 상태에서는 `N일 후 대여 예정`, 당일은 `오늘 대여 예정`, 약속일이 지난 뒤 실제 전달 확인 전에는 `대여 확인 대기`로 표시합니다. 실제 전달 확인 및 `BORROWED` 전이는 다음 단계입니다.
+`books.borrowerId`가 설정되므로 수락 직후 대여자는 홈의 빌린 책에서 실제 문서를 조회할 수 있습니다. 시작 시각 전에는 `대여 예정`으로 표시하고, 시작 시각이 지나면 관련 화면 진입 시 `loanRequests`, `books`, `chatRooms`를 한 transaction에서 `BORROWED`로 동기화합니다. 대여 중 화면은 약속의 `dueAt`을 기준으로 `반납 D-N`, 당일 `반납 D-Day`, 기한 경과 시 `반납 D+N`을 표시합니다.
 
-채팅방 화면은 메시지 subcollection을 `createdAt ASC`로 실시간 구독합니다. 약속 작성 시 메시지 생성과 `chatRooms.lastMessage*` 갱신을 단일 transaction으로 수행합니다. 약속 수락·거절·수정과 대여 상태 변경은 다음 단계입니다.
+현재 전환은 로그인한 사용자가 홈, 빌릴래요/빌려줄래요 목록, 마이페이지 대여 내역 또는 채팅방에 진입할 때 실행되는 클라이언트 보정 로직입니다. 앱이 닫힌 상태에서도 약속 시각에 정확히 전환되어야 하는 운영 환경에서는 아래의 예약 Cloud Function을 함께 배포해야 합니다.
+
+약속 수락 transaction은 원본 약속 메시지 ID에 `_accepted`를 붙인 고정 문서 ID로 수락 안내 메시지를 함께 생성합니다. transaction 재시도나 중복 수락에도 같은 문서만 갱신되므로 채팅방에는 한 번만 표시되며, 양쪽 사용자가 대여·반납 날짜와 장소를 동일한 snapshot으로 확인합니다.
+
+채팅방 화면은 메시지 subcollection을 `createdAt ASC`로 실시간 구독합니다. 약속 작성 시 메시지 생성과 `chatRooms.lastMessage*` 갱신을 단일 transaction으로 수행합니다. 약속 거절·수정과 반납 완료 처리는 다음 단계입니다.
 
 채팅 사진은 `expo-image-picker`로 사진첩 또는 시스템 카메라에서 한 장을 선택한 뒤 `chat-media/{roomId}/{senderUid}/{fileName}`에 업로드합니다. 업로드 완료 후에만 `IMAGE` 메시지와 `chatRooms.lastMessage*`를 transaction으로 저장합니다. 메시지 transaction이 참가자·차단 검증 등으로 실패하면 이미 업로드한 Storage 객체를 즉시 삭제합니다. 이미지 크기는 10MB 미만, MIME type은 `image/*`만 허용합니다.
 
@@ -189,7 +194,7 @@ Security Rules에서는 `records.userId == request.auth.uid`인 문서만 생성
 - 메시지와 약속 생성은 Rules의 `exists()`로 양방향 차단 문서가 모두 없는 경우에만 허용
 - `chatReports`는 인증된 채팅 참가자만 생성할 수 있고 `reporterId == request.auth.uid`; 클라이언트 수정·삭제 및 일반 목록 조회 금지
 
-### P0 — 대여 상태 전이용 Callable Cloud Function
+### P0 — 대여 상태 전이용 Cloud Functions
 
 현재 프론트의 대여 신청 transaction은 UX 연결용입니다. 중복 신청 방지와 경쟁 상태를 완전히 해결하려면 다음 Callable Function이 필요합니다.
 
@@ -199,11 +204,11 @@ Security Rules에서는 `records.userId == request.auth.uid`인 문서만 생성
 - `cancelLoanRequest(requestId)`
 - `completeReturn(requestId)`
 - `acceptMeetingProposal(roomId, messageId)`
-- `confirmLoanHandover(requestId)`
+- `activateDueLoans()` (Scheduled Function, 분 단위 실행)
 
-기존 `acceptLoanRequest`는 약속 없이 즉시 `BORROWED`로 전이하지 않도록 역할을 재정의하거나 제거해야 합니다. 대여 확정은 약속 수락과 실제 전달 확인의 두 단계로 분리합니다.
+기존 `acceptLoanRequest`는 약속 없이 즉시 `BORROWED`로 전이하지 않도록 역할을 재정의하거나 제거해야 합니다. 약속 수락 시 `SCHEDULED`로 예약하고 시작 시각 도래 시 `BORROWED`로 전이합니다.
 
-현재 프론트 transaction의 `acceptMeetingProposal`은 `REQUESTED/AVAILABLE`을 검증한 뒤 `SCHEDULED/RESERVED`로 예약합니다. 운영용 Function에서는 동일 책의 나머지 `REQUESTED` 신청도 함께 거절해야 합니다. `confirmLoanHandover`가 실제 전달을 양측 또는 소유자 확인 후 `loanRequests.status = BORROWED`, `books.status = BORROWED`로 전이해야 합니다.
+현재 프론트 transaction의 `acceptMeetingProposal`은 `REQUESTED/AVAILABLE`을 검증한 뒤 `SCHEDULED/RESERVED`로 예약합니다. 운영용 Function에서는 동일 책의 나머지 `REQUESTED` 신청도 함께 거절해야 합니다. `activateDueLoans`는 `status == SCHEDULED && loanAt <= now`인 요청을 조회해 `loanRequests.status`, `books.status`, `chatRooms.status`를 원자적으로 `BORROWED`로 바꿔야 합니다. 앱의 `syncDueLoans`는 Scheduled Function이 지연되거나 아직 배포되지 않은 개발 환경을 위한 보정 로직입니다.
 
 `createLoanRequest(s)`도 운영 전 Callable Function으로 이전하여 제목별 활성 요청 3건 제한, `activeLoanRequestLocks`, `activeLoanRequestGroups`, 요청 및 채팅 생성을 서버 transaction으로 처리해야 합니다. 요청 종료 및 한 요청 수락 시 그룹/잠금 정리도 같은 Function에서 원자적으로 수행합니다.
 

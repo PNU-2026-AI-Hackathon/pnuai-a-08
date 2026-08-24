@@ -1,8 +1,10 @@
 export type RentalHistoryItem = {
   id: string;
+  chatRoomId?: string;
   role: 'BORROWER' | 'OWNER';
-  status: 'RETURNED' | 'COMPLETED';
-  completedAt: string;
+  status: 'SCHEDULED' | 'BORROWED' | 'RETURNED' | 'COMPLETED';
+  eventAt: string;
+  dueAt?: string;
   book: {
     id: string;
     title: string;

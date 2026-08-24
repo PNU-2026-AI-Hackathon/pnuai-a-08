@@ -34,6 +34,7 @@ export interface RentalRepository {
   getAvailableBooks(currentUserId: string): Promise<AvailableBook[]>;
   createLoanRequest(input: CreateLoanRequestInput): Promise<string>;
   createLoanRequests(input: { bookIds: string[]; borrowerId: string }): Promise<string[]>;
+  syncDueLoans(userId: string): Promise<void>;
   getBorrowedRentals(borrowerId: string): Promise<BorrowedRental[]>;
   getLentBooks(ownerId: string): Promise<LentBook[]>;
 }
@@ -167,13 +168,71 @@ class FirestoreRentalRepository implements RentalRepository {
     return requests.map((item) => item.requestReference.id);
   }
 
+  async syncDueLoans(userId: string): Promise<void> {
+    if (!userId) return;
+    const requests = collection(db, 'loanRequests');
+    const [borrowedSnapshot, lentSnapshot] = await Promise.all([
+      getDocs(query(requests, where('borrowerId', '==', userId))),
+      getDocs(query(requests, where('ownerId', '==', userId))),
+    ]);
+    const unique = new Map([...borrowedSnapshot.docs, ...lentSnapshot.docs].map((request) => [request.id, request]));
+    const dueRequests = [...unique.values()].filter((request) => {
+      const data = request.data();
+      const loanAt = toIsoString(data.loanAt);
+      return data.status === 'SCHEDULED'
+        && typeof data.bookId === 'string'
+        && Boolean(data.bookId)
+        && typeof data.borrowerId === 'string'
+        && Boolean(data.borrowerId)
+        && Boolean(loanAt)
+        && new Date(loanAt!).getTime() <= Date.now();
+    });
+
+    await Promise.all(dueRequests.map(async (scheduledRequest) => {
+      const scheduledData = scheduledRequest.data();
+      const requestReference = doc(db, 'loanRequests', scheduledRequest.id);
+      const bookReference = doc(db, 'books', scheduledData.bookId);
+      const roomId = typeof scheduledData.chatRoomId === 'string' && scheduledData.chatRoomId
+        ? scheduledData.chatRoomId
+        : scheduledRequest.id;
+      const roomReference = doc(db, 'chatRooms', roomId);
+      await runTransaction(db, async (transaction) => {
+        const [request, book, room] = await Promise.all([
+          transaction.get(requestReference),
+          transaction.get(bookReference),
+          transaction.get(roomReference),
+        ]);
+        if (!request.exists() || request.data().status !== 'SCHEDULED') return;
+        const loanAt = toIsoString(request.data().loanAt);
+        if (!loanAt || new Date(loanAt).getTime() > Date.now()) return;
+        transaction.update(requestReference, {
+          status: 'BORROWED',
+          borrowedAt: request.data().loanAt,
+          updatedAt: serverTimestamp(),
+        });
+        if (book.exists() && ['RESERVED', 'BORROWED'].includes(book.data().status)) {
+          transaction.update(bookReference, {
+            status: 'BORROWED',
+            borrowerId: request.data().borrowerId,
+            borrowedAt: request.data().loanAt,
+            updatedAt: serverTimestamp(),
+          });
+        }
+        if (room.exists()) {
+          transaction.update(roomReference, { status: 'BORROWED', updatedAt: serverTimestamp() });
+        }
+      });
+    }));
+  }
+
   async getBorrowedRentals(borrowerId: string): Promise<BorrowedRental[]> {
     if (!borrowerId) return [];
+    await this.syncDueLoans(borrowerId);
     const snapshot = await getDocs(
       query(collection(db, 'loanRequests'), where('borrowerId', '==', borrowerId)),
     );
     const requests = snapshot.docs.filter((request) =>
-      ['BORROWED', 'RETURNED', 'COMPLETED'].includes(request.data().status),
+      ['SCHEDULED', 'ACCEPTED', 'BORROWED', 'RETURNED', 'COMPLETED'].includes(request.data().status),
     );
 
     const rentals = await Promise.all(requests.map(async (request): Promise<BorrowedRental> => {
@@ -208,7 +267,11 @@ class FirestoreRentalRepository implements RentalRepository {
       return {
         id: request.id,
         chatRoomId,
-        status: ['RETURNED', 'COMPLETED'].includes(data.status) ? 'RETURNED' : 'BORROWED',
+        status: ['RETURNED', 'COMPLETED'].includes(data.status)
+          ? 'RETURNED'
+          : data.status === 'SCHEDULED'
+            ? 'SCHEDULED'
+            : 'BORROWED',
         startedAt,
         dueAt: toIsoString(data.dueAt),
         returnedAt: toIsoString(data.returnedAt ?? (data.status === 'COMPLETED' ? data.updatedAt : undefined)),
@@ -244,6 +307,7 @@ class FirestoreRentalRepository implements RentalRepository {
 
   async getLentBooks(ownerId: string): Promise<LentBook[]> {
     if (!ownerId) return [];
+    await this.syncDueLoans(ownerId);
     const [bookSnapshot, requestSnapshot] = await Promise.all([
       getDocs(query(collection(db, 'books'), where('ownerId', '==', ownerId))),
       getDocs(query(collection(db, 'loanRequests'), where('ownerId', '==', ownerId))),

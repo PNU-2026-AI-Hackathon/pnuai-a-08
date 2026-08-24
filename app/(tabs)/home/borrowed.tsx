@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/auth/AuthProvider';
 import { useBorrowedRentals } from '@/hooks/useBorrowedRentals';
 import { BorrowedRental } from '@/models/BorrowedRental';
+import { formatReturnDday } from '@/utils/rentalDate';
 
 const localCovers: Record<string, ImageSourcePropType> = {
   급류: require('../../../pictures/급류.png'),
@@ -37,6 +38,7 @@ function chunkItems<T>(items: T[], size: number) {
 
 function BorrowedBook({ rental, width }: { rental: BorrowedRental; width: number }) {
   const height = Math.round(width * 1.45);
+  const scheduled = rental.status === 'SCHEDULED';
   const localCover = localCovers[rental.book.title];
   const source = rental.book.coverUrl ? { uri: rental.book.coverUrl } : localCover;
 
@@ -48,7 +50,7 @@ function BorrowedBook({ rental, width }: { rental: BorrowedRental; width: number
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${rental.book.title}, 대여중`}
+      accessibilityLabel={`${rental.book.title}, ${scheduled ? '대여 예정' : `대여중 ${formatReturnDday(rental.dueAt)}`}`}
       disabled={!rental.chatRoomId}
       onPress={openRental}
       style={({ pressed }) => [styles.book, { width, height }, pressed && styles.pressed]}
@@ -63,7 +65,7 @@ function BorrowedBook({ rental, width }: { rental: BorrowedRental; width: number
       )}
       <View style={styles.rentalBadge}>
         <View style={styles.statusDot} />
-        <Text style={styles.rentalBadgeText}>대여중</Text>
+        <Text numberOfLines={1} style={styles.rentalBadgeText}>{scheduled ? '대여 예정' : `대여중 · ${formatReturnDday(rental.dueAt)}`}</Text>
       </View>
     </Pressable>
   );
@@ -95,7 +97,7 @@ export default function BorrowedBooksScreen() {
   const { user } = useAuth();
   const { rentals, isLoading, error, reload } = useBorrowedRentals(user?.uid ?? '');
   const pageWidth = Math.min(width, 620);
-  const activeRentals = useMemo(() => rentals.filter((rental) => rental.status === 'BORROWED'), [rentals]);
+  const activeRentals = useMemo(() => rentals.filter((rental) => rental.status !== 'RETURNED'), [rentals]);
   const groups = useMemo(() => {
     const grouped = new Map<string, BorrowedRental[]>();
     activeRentals.forEach((rental) => {
@@ -130,7 +132,7 @@ export default function BorrowedBooksScreen() {
         ) : activeRentals.length === 0 ? (
           <View style={styles.state}>
             <Ionicons name="library-outline" size={40} color="#B1B1B1" />
-            <Text style={styles.emptyTitle}>현재 대여 중인 책이 없어요.</Text>
+            <Text style={styles.emptyTitle}>현재 빌린 책이 없어요.</Text>
             <Pressable onPress={() => router.push('/(tabs)/rental/borrow')} style={styles.borrowButton}><Text style={styles.borrowButtonText}>책 둘러보기</Text></Pressable>
           </View>
         ) : (
@@ -154,6 +156,6 @@ const styles = StyleSheet.create({
   content: { paddingTop: 25, paddingBottom: 112 }, monthGroup: { marginBottom: 4 }, monthTitle: { color: '#111111', fontSize: 16, lineHeight: 22, fontWeight: '900', marginLeft: 35, marginBottom: 7 },
   shelfRow: { position: 'relative', overflow: 'hidden' }, shelfGlow: { position: 'absolute', left: 4, right: -20, top: 8, backgroundColor: 'rgba(233,250,144,0.2)' }, bookRow: { position: 'absolute', zIndex: 2, left: 32, right: 32, top: 0, flexDirection: 'row', alignItems: 'flex-end' }, shelfImage: { position: 'absolute', zIndex: 3 }, shelfAsset: { width: '100%', height: '100%' },
   book: { borderRadius: 4, backgroundColor: '#F4F0E8', shadowColor: '#000000', shadowOffset: { width: 8, height: 6 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 7 }, cover: { width: '100%', height: '100%', borderRadius: 4 }, fallbackCover: { width: '100%', height: '100%', borderRadius: 4, alignItems: 'center', justifyContent: 'flex-end', paddingHorizontal: 8, paddingBottom: 28 }, fallbackTitle: { color: '#2B2019', fontSize: 13, lineHeight: 17, fontWeight: '900', textAlign: 'center' }, fallbackAuthor: { color: '#5D442D', fontSize: 8, marginTop: 6 },
-  rentalBadge: { position: 'absolute', zIndex: 4, left: 12, right: 12, bottom: 5, height: 20, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: 'rgba(26,26,26,0.78)' }, statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#D6FF42' }, rentalBadgeText: { color: 'rgba(255,255,255,0.92)', fontSize: 8.5, lineHeight: 12, fontWeight: '900' },
+  rentalBadge: { position: 'absolute', zIndex: 4, left: 4, right: 4, bottom: 5, height: 20, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, paddingHorizontal: 3, backgroundColor: 'rgba(26,26,26,0.78)' }, statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#D6FF42' }, rentalBadgeText: { flexShrink: 1, color: 'rgba(255,255,255,0.92)', fontSize: 7.5, lineHeight: 11, fontWeight: '900' },
   state: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 13, paddingHorizontal: 30 }, stateText: { color: '#746E69', fontSize: 13, textAlign: 'center' }, emptyTitle: { color: '#362E29', fontSize: 16, fontWeight: '800' }, retry: { paddingHorizontal: 17, paddingVertical: 8, borderRadius: 20, backgroundColor: '#E8EDCC' }, retryText: { color: '#7A8B26', fontSize: 12, fontWeight: '800' }, borrowButton: { height: 40, paddingHorizontal: 20, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#A0B243' }, borrowButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' }, pressed: { opacity: 0.68, transform: [{ scale: 0.985 }] },
 });

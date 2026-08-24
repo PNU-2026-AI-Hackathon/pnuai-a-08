@@ -45,7 +45,7 @@ function MeetingCard({ message, mine, onOpen }: { message: ChatMessage; mine: bo
   if (!meeting) return null;
   return (
     <View style={[styles.meetingCard, mine ? styles.mineMeeting : styles.otherMeeting]}>
-      <View style={styles.meetingHeader}><Text style={styles.meetingHeaderText}>{meeting.status === 'ACCEPTED' ? '대여 약속이 성사됐어요' : '약속을 만들었어요'}</Text></View>
+      <View style={styles.meetingHeader}><Text style={styles.meetingHeaderText}>{meeting.status === 'ACCEPTED' ? '대여 약속이 성사됐어요' : '대여 약속을 신청했어요'}</Text></View>
       <View style={styles.meetingBody}>
         <Text style={styles.meetingLine}><Text style={styles.meetingStrong}>대여: </Text>{formatMeetingDate(meeting.loanAt)}</Text>
         <Text style={styles.meetingPlace}>         {meeting.loanPlace.name}</Text>
@@ -59,12 +59,52 @@ function MeetingCard({ message, mine, onOpen }: { message: ChatMessage; mine: bo
   );
 }
 
+function AcceptedMeetingCard({ message }: { message: ChatMessage }) {
+  const meeting = message.meeting;
+  if (!meeting) return null;
+  return (
+    <View style={styles.acceptedCard}>
+      <View style={styles.acceptedHeader}>
+        <View style={styles.acceptedCheck}><Ionicons name="checkmark" size={14} color="#FFFFFF" /></View>
+        <Text style={styles.acceptedTitle}>약속이 수락됐습니다.</Text>
+      </View>
+      <View style={styles.acceptedBody}>
+        <View style={styles.acceptedRow}>
+          <Text style={styles.acceptedLabel}>대여 날짜</Text>
+          <Text style={styles.acceptedValue}>{formatMeetingDate(meeting.loanAt)}</Text>
+        </View>
+        <View style={styles.acceptedRow}>
+          <Text style={styles.acceptedLabel}>대여 장소</Text>
+          <Text numberOfLines={2} style={styles.acceptedValue}>{meeting.loanPlace.name}</Text>
+        </View>
+        <View style={styles.acceptedDivider} />
+        <View style={styles.acceptedRow}>
+          <Text style={styles.acceptedLabel}>반납 날짜</Text>
+          <Text style={styles.acceptedValue}>{formatMeetingDate(meeting.returnAt)}</Text>
+        </View>
+        <View style={styles.acceptedRow}>
+          <Text style={styles.acceptedLabel}>반납 장소</Text>
+          <Text numberOfLines={2} style={styles.acceptedValue}>{meeting.returnPlace.name}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 function MessageItem({ message, userId, showDay, onOpenMeeting }: { message: ChatMessage; userId: string; showDay: boolean; onOpenMeeting: (message: ChatMessage) => void }) {
   const mine = message.senderId === userId;
   const imageRatio = message.image?.width && message.image.height
     ? message.image.width / message.image.height
     : 1;
   const imageHeight = Math.min(260, Math.max(125, 210 / imageRatio));
+  if (message.type === 'MEETING_ACCEPTED') {
+    return (
+      <View>
+        {showDay ? <Text style={styles.day}>{formatDay(message.createdAt)}</Text> : null}
+        <AcceptedMeetingCard message={message} />
+      </View>
+    );
+  }
   return (
     <View>
       {showDay ? <Text style={styles.day}>{formatDay(message.createdAt)}</Text> : null}
@@ -576,6 +616,7 @@ const styles = StyleSheet.create({
   chatImage: { width: '100%', height: '100%' },
   meetingCard: { width: 207, overflow: 'hidden', borderWidth: 1.5, borderColor: '#BBDD2A', borderRadius: 17, backgroundColor: '#FFF' }, mineMeeting: { marginLeft: 'auto' }, otherMeeting: {}, meetingHeader: { height: 36, alignItems: 'center', justifyContent: 'center', backgroundColor: '#BBDD2A' },
   meetingHeaderText: { color: '#FFF', fontSize: 12, fontWeight: '800' }, meetingBody: { padding: 11 }, meetingLine: { color: '#555', fontSize: 11, lineHeight: 18 }, meetingStrong: { fontWeight: '900' }, meetingPlace: { color: '#555', fontSize: 11, lineHeight: 18 }, meetingAction: { height: 30, marginTop: 8, borderRadius: 10, backgroundColor: '#D9D9D9', alignItems: 'center', justifyContent: 'center' }, meetingActionText: { color: '#111', fontSize: 11, fontWeight: '800' },
+  acceptedCard: { width: '88%', maxWidth: 340, alignSelf: 'center', overflow: 'hidden', marginBottom: 16, borderWidth: 1.5, borderColor: '#D0D9A0', borderRadius: 16, backgroundColor: '#FFFFFF' }, acceptedHeader: { minHeight: 43, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: '#E8EDCC' }, acceptedCheck: { width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: '#A0B243' }, acceptedTitle: { color: '#5D442D', fontSize: 14, fontWeight: '900' }, acceptedBody: { paddingHorizontal: 16, paddingVertical: 12, gap: 8 }, acceptedRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 }, acceptedLabel: { width: 58, color: '#7A8B26', fontSize: 11, lineHeight: 17, fontWeight: '900' }, acceptedValue: { flex: 1, color: '#555555', fontSize: 11, lineHeight: 17, fontWeight: '600' }, acceptedDivider: { height: StyleSheet.hairlineWidth, marginVertical: 2, backgroundColor: '#E3E8C9' },
   composerArea: { paddingHorizontal: 15, backgroundColor: '#FFF' }, composer: { height: 50, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.5)', borderRadius: 13, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 5 }, addButton: { width: 34, height: 40, alignItems: 'center', justifyContent: 'center' },
   input: { flex: 1, height: 38, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.45)', borderRadius: 12, paddingHorizontal: 13, paddingVertical: 0, color: '#222', fontSize: 14 }, sendButton: { width: 38, height: 38, marginLeft: 5, borderRadius: 11, backgroundColor: '#B8D83C', alignItems: 'center', justifyContent: 'center' },
   extraRow: { height: 112, flexDirection: 'row', justifyContent: 'space-between', paddingTop: 16 }, extraItem: { width: '24%', alignItems: 'center' }, extraIcon: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#F1F1F1', alignItems: 'center', justifyContent: 'center' }, extraLabel: { marginTop: 7, color: '#111', fontSize: 11 },

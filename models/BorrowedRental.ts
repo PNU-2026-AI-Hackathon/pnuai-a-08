@@ -1,4 +1,4 @@
-export type BorrowedRentalStatus = 'BORROWED' | 'RETURNED';
+export type BorrowedRentalStatus = 'SCHEDULED' | 'BORROWED' | 'RETURNED';
 
 export type BorrowedRental = {
   id: string;

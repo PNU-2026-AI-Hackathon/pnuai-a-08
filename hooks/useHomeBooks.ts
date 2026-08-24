@@ -2,6 +2,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 
 import { bookRepository, HomeBooks } from '@/services/bookRepository';
+import { rentalRepository } from '@/services/rentalRepository';
 
 const emptyBooks: HomeBooks = {
   borrowed: [],
@@ -18,6 +19,7 @@ export function useHomeBooks(userId: string) {
     setError(null);
 
     try {
+      await rentalRepository.syncDueLoans(userId);
       setBooks(await bookRepository.getHomeBooks(userId));
     } catch {
       setError('책 정보를 불러오지 못했어요.');

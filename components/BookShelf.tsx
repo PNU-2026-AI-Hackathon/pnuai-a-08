@@ -2,6 +2,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { FlatList, Image, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { Book } from '@/models/Book';
+import { formatReturnDday } from '@/utils/rentalDate';
 
 type BookShelfProps = {
   books: readonly Book[];
@@ -13,15 +14,6 @@ type BookShelfProps = {
 type ShelfItem =
   | { type: 'book'; book: Book }
   | { type: 'add'; id: 'add-book' };
-
-function formatDueDate(dueDate: string) {
-  const millisecondsPerDay = 1000 * 60 * 60 * 24;
-  const remainingDays = Math.max(
-    0,
-    Math.ceil((new Date(dueDate).getTime() - Date.now()) / millisecondsPerDay),
-  );
-  return remainingDays === 0 ? '오늘 반납' : `반납까지 ${remainingDays}일 남음`;
-}
 
 function formatRentalStart(value: string) {
   const millisecondsPerDay = 1000 * 60 * 60 * 24;
@@ -35,7 +27,7 @@ function BookCard({ book, width, onPress }: { book: Book; width: number; onPress
   const dueLabel = book.status === 'RESERVED' && book.rentalStartsAt
     ? formatRentalStart(book.rentalStartsAt)
     : book.dueDate
-      ? formatDueDate(book.dueDate)
+      ? `대여중 · ${formatReturnDday(book.dueDate)}`
       : null;
 
   return (

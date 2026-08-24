@@ -29,7 +29,7 @@ export type ChatImageAttachment = {
 export type ChatMessage = {
   id: string;
   senderId: string;
-  type: 'TEXT' | 'MEETING' | 'IMAGE';
+  type: 'TEXT' | 'MEETING' | 'MEETING_ACCEPTED' | 'IMAGE';
   text: string;
   createdAt: string;
   meeting?: MeetingProposal;

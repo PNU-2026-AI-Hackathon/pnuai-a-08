@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { ChatMessage } from '@/models/ChatMessage';
 import { ChatRoom } from '@/models/ChatRoom';
 import { chatRepository } from '@/services/chatRepository';
+import { rentalRepository } from '@/services/rentalRepository';
 
 export function useChatThread(roomId: string, userId: string) {
   const [room, setRoom] = useState<ChatRoom | null>(null);
@@ -15,7 +16,8 @@ export function useChatThread(roomId: string, userId: string) {
     setIsLoading(true);
     setError(null);
 
-    void chatRepository.getRoom(roomId, userId)
+    void rentalRepository.syncDueLoans(userId)
+      .then(() => chatRepository.getRoom(roomId, userId))
       .then((nextRoom) => {
         if (!nextRoom) throw new Error('CHAT_ROOM_NOT_FOUND');
         if (isActive) setRoom(nextRoom);
