@@ -21,6 +21,9 @@ export type Book = {
   coverUrl?: string;
   coverStoragePath?: string;
   description?: string;
+  totalPages?: number;
   isLendable?: boolean;
   status?: 'PRIVATE' | 'AVAILABLE' | 'RESERVED' | 'BORROWED';
+  createdAt?: string;
+  updatedAt?: string;
 };

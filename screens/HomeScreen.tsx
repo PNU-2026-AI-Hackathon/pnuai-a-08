@@ -8,7 +8,7 @@ import { useHomeBooks } from '@/hooks/useHomeBooks';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { Book } from '@/models/Book';
 
-function SectionHeader({ title, count }: { title: string; count: number }) {
+function SectionHeader({ title, count, onPress }: { title: string; count: number; onPress?: () => void }) {
   return (
     <View style={styles.sectionHeader}>
       <View style={styles.sectionHeading}>
@@ -18,6 +18,8 @@ function SectionHeader({ title, count }: { title: string; count: number }) {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${title} 전체보기`}
+        disabled={!onPress}
+        onPress={onPress}
         hitSlop={10}
         style={({ pressed }) => pressed && styles.pressed}
       >
@@ -78,14 +80,14 @@ export default function HomeScreen() {
           ) : (
             <>
               <View style={styles.section}>
-                <SectionHeader title="빌린 책" count={borrowed.length} />
+                <SectionHeader title="빌린 책" count={borrowed.length} onPress={() => router.push('/home/borrowed')} />
                 <View style={styles.shelfShift}>
                   <BookShelf books={borrowed} variant="borrowed" onPressBook={openBook} />
                 </View>
               </View>
 
               <View style={styles.secondSection}>
-                <SectionHeader title="나의 책" count={owned.length} />
+                <SectionHeader title="나의 책" count={owned.length} onPress={() => router.push('/home/records')} />
                 <View style={styles.shelfShift}>
                   <BookShelf
                     books={owned}

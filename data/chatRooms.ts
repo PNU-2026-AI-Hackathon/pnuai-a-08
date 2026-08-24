@@ -22,6 +22,7 @@ export const chatRooms: ChatRoom[] = [
     lastMessageAt: minutesAgo(12),
     unreadCount: 2,
     status: 'accepted',
+    memberSettings: { isActive: true, notificationsMuted: false, hasBlockedOtherUser: false },
   },
   {
     id: 'chat-current-doyoon',
@@ -41,6 +42,7 @@ export const chatRooms: ChatRoom[] = [
     lastMessageAt: minutesAgo(98),
     unreadCount: 0,
     status: 'requested',
+    memberSettings: { isActive: true, notificationsMuted: false, hasBlockedOtherUser: false },
   },
   {
     id: 'chat-contradiction-seoyeon',
@@ -60,6 +62,7 @@ export const chatRooms: ChatRoom[] = [
     lastMessageAt: minutesAgo(60 * 25),
     unreadCount: 0,
     status: 'onLoan',
+    memberSettings: { isActive: true, notificationsMuted: false, hasBlockedOtherUser: false },
   },
   {
     id: 'chat-thousand-blue-jian',
@@ -79,6 +82,6 @@ export const chatRooms: ChatRoom[] = [
     lastMessageAt: minutesAgo(60 * 72),
     unreadCount: 0,
     status: 'completed',
+    memberSettings: { isActive: true, notificationsMuted: false, hasBlockedOtherUser: false },
   },
 ];
-

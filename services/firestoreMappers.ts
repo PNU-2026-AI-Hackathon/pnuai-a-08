@@ -3,6 +3,7 @@ import { DocumentData, DocumentSnapshot, Timestamp } from 'firebase/firestore';
 import { AvailableBook, LendingPlace, LocalBookCover } from '@/models/AvailableBook';
 import { Book, BookCoverMotif } from '@/models/Book';
 import { ChatRoom, ChatRoomStatus } from '@/models/ChatRoom';
+import { ReadingRecord } from '@/models/ReadingRecord';
 
 const bookThemes: Array<{
   colors: readonly [string, string];
@@ -37,6 +38,10 @@ function asString(value: unknown, fallback = '') {
 
 function asStringArray(value: unknown) {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+function asFiniteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function toLendingPlace(value: unknown): LendingPlace {
@@ -81,14 +86,35 @@ export function mapBook(snapshot: DocumentSnapshot<DocumentData>, dueDate?: unkn
     coverUrl: asString(data.coverUrl) || undefined,
     coverStoragePath: asString(data.coverStoragePath) || undefined,
     description: asString(data.description) || undefined,
+    totalPages: asFiniteNumber(data.totalPages),
     isLendable: typeof data.isLendable === 'boolean' ? data.isLendable : undefined,
     status: ['PRIVATE', 'AVAILABLE', 'RESERVED', 'BORROWED'].includes(status ?? '') ? status : undefined,
+    createdAt: toIsoString(data.createdAt),
+    updatedAt: toIsoString(data.updatedAt),
+  };
+}
+
+export function mapReadingRecord(snapshot: DocumentSnapshot<DocumentData>): ReadingRecord {
+  const data = snapshot.data() ?? {};
+  return {
+    id: snapshot.id,
+    bookId: asString(data.bookId),
+    userId: asString(data.userId),
+    status: data.status === 'COMPLETED' ? 'COMPLETED' : 'READING',
+    currentPage: asFiniteNumber(data.currentPage) ?? 0,
+    startedAt: toIsoString(data.startedAt) ?? new Date(0).toISOString(),
+    finishedAt: toIsoString(data.finishedAt),
+    rating: asFiniteNumber(data.rating),
+    oneLineReview: asString(data.oneLineReview) || undefined,
+    createdAt: toIsoString(data.createdAt),
+    updatedAt: toIsoString(data.updatedAt),
   };
 }
 
 export function mapAvailableBook(
   snapshot: DocumentSnapshot<DocumentData>,
   ownerDisplayName: string,
+  ownerDepartment?: string,
 ): AvailableBook {
   const data = snapshot.data() ?? {};
   const title = asString(data.title, '제목 없음');
@@ -99,9 +125,12 @@ export function mapAvailableBook(
     author: asString(data.author, '저자 미상'),
     ownerId: asString(data.ownerId),
     ownerDisplayName,
-    status: 'AVAILABLE',
+    status: ['RESERVED', 'BORROWED'].includes(data.status) ? data.status : 'AVAILABLE',
     isLendable: true,
     lendingPlace: toLendingPlace(data.lendingPlace),
+    publisher: asString(data.publisher) || undefined,
+    publishedYear: toIsoString(data.publishedDate) ? new Date(toIsoString(data.publishedDate)!).getFullYear() : undefined,
+    ownerDepartment,
     coverUrl: asString(data.coverUrl) || undefined,
     localCover: localCoverForTitle(title),
   };
@@ -121,6 +150,11 @@ export function mapChatRoom(
   otherDisplayName: string,
   otherPhotoURL?: string,
   requestStatus?: unknown,
+  memberSettings?: {
+    isActive: boolean;
+    notificationsMuted: boolean;
+    hasBlockedOtherUser: boolean;
+  },
 ): ChatRoom {
   const data = snapshot.data() ?? {};
   const bookSnapshot =
@@ -158,5 +192,10 @@ export function mapChatRoom(
           ? unreadCountByUser[currentUserId] as number
           : 0,
     status: toChatStatus(requestStatus ?? data.status),
+    memberSettings: memberSettings ?? {
+      isActive: true,
+      notificationsMuted: false,
+      hasBlockedOtherUser: false,
+    },
   };
 }

@@ -18,8 +18,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
+import { KakaoPlacePickerModal } from '@/components/KakaoPlacePickerModal';
 import { formatPublishedDate, PublishedDatePicker } from '@/components/PublishedDatePicker';
 import { useLentBooks } from '@/hooks/useLentBooks';
+import { MeetingPlace } from '@/models/ChatMessage';
 import { LentBook, LentBookStatus } from '@/models/LentBook';
 import { bookRepository } from '@/services/bookRepository';
 
@@ -130,6 +132,8 @@ export default function LendBookScreen() {
   const [publisher, setPublisher] = useState('');
   const [publishedDate, setPublishedDate] = useState<Date | null>(null);
   const [calendarOpen, setCalendarOpen] = useState(false);
+  const [lendingPlace, setLendingPlace] = useState<MeetingPlace>(campus);
+  const [placePickerOpen, setPlacePickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const { books, isLoading, error, reload } = useLentBooks(user?.uid ?? '');
   const pageWidth = Math.min(width, 620);
@@ -157,7 +161,17 @@ export default function LendBookScreen() {
         publisher: publisher.trim(),
         publishedDate: publishedDate.toISOString(),
         isLendable: true,
-        lendingPlace: campus,
+        lendingPlace: {
+          placeId: lendingPlace.placeId ?? 'custom-lending-place',
+          name: lendingPlace.name,
+          address: lendingPlace.address,
+          ...(typeof lendingPlace.latitude === 'number'
+            ? { latitude: lendingPlace.latitude }
+            : {}),
+          ...(typeof lendingPlace.longitude === 'number'
+            ? { longitude: lendingPlace.longitude }
+            : {}),
+        },
       });
       setTitle('');
       setAuthor('');
@@ -187,10 +201,20 @@ export default function LendBookScreen() {
         </View>
 
         <ModeSwitch mode={mode} onChange={setMode} />
-        <View style={styles.campusRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`대여 장소 선택, 현재 ${lendingPlace.name}`}
+          onPress={() => setPlacePickerOpen(true)}
+          style={({ pressed }) => [styles.campusRow, pressed && styles.pressed]}
+        >
           <Ionicons name="location-outline" size={21} color="#A0B243" />
-          <Text style={styles.campusText}>{campus.name}</Text>
-        </View>
+          <View style={styles.campusCopy}>
+            <Text numberOfLines={1} style={styles.campusText}>{lendingPlace.name}</Text>
+            <Text numberOfLines={1} style={styles.campusAddress}>{lendingPlace.address}</Text>
+          </View>
+          <Text style={styles.placeChange}>장소 선택</Text>
+          <Ionicons name="chevron-forward" size={17} color="#A0B243" />
+        </Pressable>
 
         {mode === 'register' ? (
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.formScroll}>
@@ -246,6 +270,13 @@ export default function LendBookScreen() {
           </ScrollView>
         )}
       </KeyboardAvoidingView>
+      <KakaoPlacePickerModal
+        visible={placePickerOpen}
+        title="대여 장소 선택"
+        initialPlace={lendingPlace}
+        onClose={() => setPlacePickerOpen(false)}
+        onSelect={setLendingPlace}
+      />
     </SafeAreaView>
   );
 }
@@ -261,8 +292,11 @@ const styles = StyleSheet.create({
   modeButtonActive: { borderColor: '#A2B155', backgroundColor: '#A2B155' },
   modeText: { color: '#5D442D', fontSize: 12, fontWeight: '800' },
   modeTextActive: { color: '#FFFFFF' },
-  campusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10 },
-  campusText: { color: '#171513', fontSize: 14, lineHeight: 26, fontWeight: '700' },
+  campusRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, marginHorizontal: 24, paddingHorizontal: 12, borderWidth: 1, borderColor: '#E3E8C9', borderRadius: 12, backgroundColor: '#FAFCEB' },
+  campusCopy: { flex: 1, minWidth: 0 },
+  campusText: { color: '#171513', fontSize: 13, fontWeight: '800' },
+  campusAddress: { marginTop: 3, color: '#7A746E', fontSize: 10 },
+  placeChange: { color: '#7A8B26', fontSize: 11, fontWeight: '800' },
   formScroll: { alignItems: 'center', paddingTop: 25, paddingBottom: 32 },
   formTitle: { color: '#362E29', fontSize: 20, lineHeight: 28, fontWeight: '800', marginBottom: 12 },
   field: { marginTop: 11 },

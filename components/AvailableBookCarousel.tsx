@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useRef } from 'react';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors, radius, spacing } from '@/constants/theme';
 import { AvailableBook, LocalBookCover } from '@/models/AvailableBook';
@@ -29,6 +30,7 @@ type AvailableBookCarouselProps = {
   selectedIndex: number;
   onSelectIndex: (index: number) => void;
   onPressBook: (book: AvailableBook) => void;
+  showMeta?: boolean;
 };
 
 type CarouselCardProps = {
@@ -38,9 +40,10 @@ type CarouselCardProps = {
   interval: number;
   scrollX: Animated.Value;
   onPress: () => void;
+  showMeta: boolean;
 };
 
-function CarouselCard({ book, index, cardWidth, interval, scrollX, onPress }: CarouselCardProps) {
+function CarouselCard({ book, index, cardWidth, interval, scrollX, onPress, showMeta }: CarouselCardProps) {
   const inputRange = [(index - 1) * interval, index * interval, (index + 1) * interval];
   const scale = scrollX.interpolate({
     inputRange,
@@ -56,7 +59,7 @@ function CarouselCard({ book, index, cardWidth, interval, scrollX, onPress }: Ca
     ? coverAssets[book.localCover]
     : book.coverUrl
       ? { uri: book.coverUrl }
-      : coverAssets.current;
+      : null;
 
   return (
     <Animated.View style={[styles.cardWrap, { width: cardWidth, opacity, transform: [{ scale }] }]}>
@@ -67,10 +70,14 @@ function CarouselCard({ book, index, cardWidth, interval, scrollX, onPress }: Ca
         onPress={onPress}
         style={({ pressed }) => [styles.cardPressable, pressed && styles.pressed]}
       >
-        <Image source={source} style={styles.cover} resizeMode="cover" />
+        {source ? <Image source={source} style={styles.cover} resizeMode="cover" /> : (
+          <LinearGradient colors={['#E8EDCC', '#FFF8EB']} style={styles.fallbackCover}>
+            <Text numberOfLines={3} style={styles.fallbackTitle}>{book.title}</Text>
+            <Text numberOfLines={1} style={styles.fallbackAuthor}>{book.author}</Text>
+          </LinearGradient>
+        )}
       </Pressable>
-      <Text numberOfLines={1} style={styles.title}>{book.title}</Text>
-      <Text numberOfLines={1} style={styles.author}>{book.author}</Text>
+      {showMeta ? <><Text numberOfLines={1} style={styles.title}>{book.title}</Text><Text numberOfLines={1} style={styles.author}>{book.author}</Text></> : null}
     </Animated.View>
   );
 }
@@ -82,6 +89,7 @@ export function AvailableBookCarousel({
   selectedIndex,
   onSelectIndex,
   onPressBook,
+  showMeta = false,
 }: AvailableBookCarouselProps) {
   const gap = spacing.md;
   const interval = cardWidth + gap;
@@ -120,6 +128,7 @@ export function AvailableBookCarousel({
             interval={interval}
             scrollX={scrollX}
             onPress={() => onPressBook(item)}
+            showMeta={showMeta}
           />
         )}
       />
@@ -151,6 +160,9 @@ const styles = StyleSheet.create({
   },
   pressed: { opacity: 0.72 },
   cover: { width: '100%', height: '100%', borderRadius: radius.sm },
+  fallbackCover: { flex: 1, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'flex-end', padding: spacing.lg },
+  fallbackTitle: { color: '#34271F', fontSize: 22, lineHeight: 28, fontWeight: '900', textAlign: 'center' },
+  fallbackAuthor: { color: '#746E69', fontSize: 12, marginTop: spacing.sm, marginBottom: spacing.md },
   title: {
     color: colors.text,
     fontSize: 15,

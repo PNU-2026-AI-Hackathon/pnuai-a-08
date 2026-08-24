@@ -26,6 +26,7 @@ export type CreateBookInput = {
   coverUrl?: string;
   coverStoragePath?: string;
   description?: string;
+  totalPages?: number;
   isLendable?: boolean;
   lendingPlace?: {
     placeId: string;
@@ -90,6 +91,7 @@ class FirestoreBookRepository implements BookRepository {
       coverUrl: input.coverUrl?.trim() ?? '',
       coverStoragePath: input.coverStoragePath?.trim() ?? '',
       description: input.description?.trim() ?? '',
+      totalPages: input.totalPages ?? null,
       ownerId,
       borrowerId: null,
       isLendable: input.isLendable ?? false,
@@ -110,7 +112,13 @@ class FirestoreBookRepository implements BookRepository {
       throw new Error('BORROWED_BOOK_CANNOT_BE_PRIVATE');
     }
 
-    const nextData: Record<string, unknown> = { ...input, updatedAt: serverTimestamp() };
+    const nextData: Record<string, unknown> = { updatedAt: serverTimestamp() };
+    for (const [key, value] of Object.entries(input)) {
+      if (value !== undefined) nextData[key] = value;
+    }
+    if (input.publishedDate !== undefined) {
+      nextData.publishedDate = input.publishedDate ? new Date(input.publishedDate) : null;
+    }
     if (typeof input.isLendable === 'boolean' && !['RESERVED', 'BORROWED'].includes(snapshot.data().status)) {
       nextData.status = input.isLendable ? 'AVAILABLE' : 'PRIVATE';
     }

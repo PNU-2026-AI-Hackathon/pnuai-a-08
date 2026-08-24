@@ -13,8 +13,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "책 표지 사진을 선택하기 위해 사진 접근을 허용해주세요.",
-          "cameraPermission": false,
+          "photosPermission": "책 표지와 채팅 사진을 선택하기 위해 사진 접근을 허용해주세요.",
+          "cameraPermission": "채팅에서 사진을 촬영하기 위해 카메라 접근을 허용해주세요.",
           "microphonePermission": false
         }
       ],

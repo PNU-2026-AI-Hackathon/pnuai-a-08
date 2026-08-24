@@ -16,10 +16,12 @@ export type AvailableBook = {
   author: string;
   ownerId: string;
   ownerDisplayName: string;
-  status: 'AVAILABLE';
+  status: 'AVAILABLE' | 'RESERVED' | 'BORROWED';
   isLendable: true;
   lendingPlace: LendingPlace;
+  publisher?: string;
+  publishedYear?: number;
+  ownerDepartment?: string;
   coverUrl?: string;
   localCover?: LocalBookCover;
 };
-

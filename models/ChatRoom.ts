@@ -30,4 +30,9 @@ export type ChatRoom = {
   lastMessageAt: string;
   unreadCount: number;
   status: ChatRoomStatus;
+  memberSettings: {
+    isActive: boolean;
+    notificationsMuted: boolean;
+    hasBlockedOtherUser: boolean;
+  };
 };

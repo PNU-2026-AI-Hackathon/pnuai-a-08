@@ -1,11 +1,13 @@
 import { MeetingPlace } from '@/models/ChatMessage';
 
 type KakaoPlaceDocument = {
+  id?: string;
   place_name?: string;
   road_address_name?: string;
   address_name?: string;
   x?: string;
   y?: string;
+  place_url?: string;
 };
 
 export const kakaoPlaceRepository = {
@@ -25,10 +27,12 @@ export const kakaoPlaceRepository = {
     if (!response.ok) throw new Error(`KAKAO_PLACE_SEARCH_FAILED_${response.status}`);
     const payload = await response.json() as { documents?: KakaoPlaceDocument[] };
     return (payload.documents ?? []).map((place) => ({
+      ...(place.id ? { placeId: place.id } : {}),
       name: place.place_name?.trim() || '이름 없는 장소',
       address: place.road_address_name?.trim() || place.address_name?.trim() || '',
-      longitude: place.x ? Number(place.x) : undefined,
-      latitude: place.y ? Number(place.y) : undefined,
+      ...(place.x && Number.isFinite(Number(place.x)) ? { longitude: Number(place.x) } : {}),
+      ...(place.y && Number.isFinite(Number(place.y)) ? { latitude: Number(place.y) } : {}),
+      ...(place.place_url ? { placeUrl: place.place_url.replace(/^http:/, 'https:') } : {}),
     }));
   },
 };

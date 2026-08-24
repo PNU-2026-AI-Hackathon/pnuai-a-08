@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -13,9 +12,11 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { BookDetailCover } from '@/components/BookDetailCover';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useBookDetail } from '@/hooks/useBookDetail';
+import { useReadingRecord } from '@/hooks/useReadingRecord';
 
 function getDueLabel(dueDate: string) {
   const millisecondsPerDay = 1000 * 60 * 60 * 24;
@@ -39,10 +40,21 @@ function getRentalLabel(status: string | undefined, rentalStartsAt: string | und
 
 export default function BookDetailScreen() {
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
+  const { user } = useAuth();
   const { width } = useWindowDimensions();
   const { book, isLoading, error } = useBookDetail(bookId ?? '');
+  const readingDetail = useReadingRecord(bookId ?? '', user?.uid ?? '');
   const pageWidth = Math.min(width, 620);
-  const coverWidth = Math.min(pageWidth * 0.56, 224);
+  const coverWidth = Math.min(pageWidth * 0.595, 232);
+  const readingProgress = book?.totalPages
+    ? Math.max(0, Math.min(100, Math.round(((readingDetail.record?.currentPage ?? 0) / book.totalPages) * 100)))
+    : 0;
+  const rentalLabel = book ? getRentalLabel(book.status, book.rentalStartsAt, book.dueDate) : null;
+  const readingLabel = readingDetail.record?.status === 'COMPLETED'
+    ? '완독'
+    : book?.totalPages
+      ? `읽는 중 · ${readingProgress}%`
+      : '읽는 중';
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
@@ -77,7 +89,7 @@ export default function BookDetailScreen() {
           </Pressable>
         </View>
 
-        {isLoading ? (
+        {isLoading || readingDetail.isLoading ? (
           <View style={styles.status}>
             <ActivityIndicator size="large" color={colors.accent} />
           </View>
@@ -90,29 +102,35 @@ export default function BookDetailScreen() {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.content}
           >
+            <View pointerEvents="none" style={styles.bookGlow} />
             <BookDetailCover book={book} width={coverWidth} />
 
             <View style={styles.bookInfo}>
               <Text style={styles.title}>{book.title.replace('\n', ' ')}</Text>
               <Text style={styles.author}>{book.author}</Text>
-              {getRentalLabel(book.status, book.rentalStartsAt, book.dueDate) ? (
+              {rentalLabel ? (
                 <View style={styles.dueBadge}>
-                  <Text style={styles.dueText}>{getRentalLabel(book.status, book.rentalStartsAt, book.dueDate)}</Text>
+                  <Text style={styles.dueText}>{rentalLabel}</Text>
                 </View>
-              ) : null}
+              ) : (
+                <View style={styles.dueBadge}>
+                  {readingDetail.record?.status === 'COMPLETED' ? <Ionicons name="checkmark" size={13} color="#5D442D" /> : null}
+                  <Text style={styles.dueText}>{readingLabel}</Text>
+                </View>
+              )}
             </View>
 
             <View style={styles.actions}>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`${book.title} 기록하기`}
-                onPress={() => Alert.alert('기록하기', '독서 기록 화면은 다음 단계에서 연결할게요.')}
+                onPress={() => router.push({ pathname: '/add-book', params: { bookId: book.id } })}
                 style={({ pressed }) => [
                   styles.primaryButton,
                   pressed && styles.buttonPressed,
                 ]}
               >
-                <Text style={styles.primaryButtonText}>기록하기</Text>
+                <Text style={styles.primaryButtonText}>{readingDetail.record?.status === 'COMPLETED' ? '기록보기' : '기록하기'}</Text>
               </Pressable>
 
               <Pressable
@@ -142,8 +160,8 @@ export default function BookDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: colors.background },
-  page: { flex: 1, alignSelf: 'center' },
+  safeArea: { flex: 1, backgroundColor: '#FFFFFF' },
+  page: { flex: 1, alignSelf: 'center', backgroundColor: '#FFFFFF' },
   topBar: {
     height: 62,
     flexDirection: 'row',
@@ -161,22 +179,25 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     alignItems: 'center',
-    paddingTop: spacing.lg,
+    paddingTop: 40,
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.lg,
   },
+  bookGlow: { position: 'absolute', top: 8, width: 293, height: 403, borderRadius: 150, backgroundColor: 'rgba(214,255,0,0.12)' },
   bookInfo: { alignItems: 'center', marginTop: spacing.xl },
   title: {
-    color: colors.text,
+    color: '#5D442D',
     fontSize: typography.title,
     fontWeight: '900',
     textAlign: 'center',
     letterSpacing: -0.8,
   },
-  author: { color: colors.textMuted, fontSize: typography.body, marginTop: spacing.sm },
+  author: { color: '#5D442D', fontSize: typography.body, marginTop: spacing.sm },
   dueBadge: {
     minHeight: 30,
     borderRadius: radius.pill,
+    flexDirection: 'row',
+    gap: 3,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
@@ -190,21 +211,21 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.accent,
+    backgroundColor: '#A2B155',
   },
-  primaryButtonText: { color: colors.text, fontSize: typography.body, fontWeight: '900' },
+  primaryButtonText: { color: '#FFFFFF', fontSize: typography.body, fontWeight: '900' },
   secondaryButton: {
     height: 52,
     flexDirection: 'row',
     borderRadius: radius.md,
     borderWidth: 1.5,
-    borderColor: colors.accent,
+    borderColor: '#A0B243',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
   },
   buttonSymbol: { width: 23, height: 23, marginRight: spacing.sm },
-  secondaryButtonText: { color: colors.text, fontSize: typography.body, fontWeight: '900' },
+  secondaryButtonText: { color: '#A0B243', fontSize: typography.body, fontWeight: '900' },
   buttonPressed: { opacity: 0.72, transform: [{ scale: 0.99 }] },
   pressed: { opacity: 0.55 },
   status: {

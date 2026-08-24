@@ -11,14 +11,30 @@ import {
 
 import { db } from '@/lib/firebase';
 import { AvailableBook } from '@/models/AvailableBook';
+import { BorrowedRental } from '@/models/BorrowedRental';
 import { LentBook } from '@/models/LentBook';
 import { mapAvailableBook, toIsoString } from '@/services/firestoreMappers';
 
 export type CreateLoanRequestInput = { bookId: string; borrowerId: string };
 
+function normalizeBookTitle(value: unknown) {
+  return String(value ?? '').trim().toLocaleLowerCase('ko-KR').replace(/\s+/g, ' ');
+}
+
+function stableTitleKey(value: string) {
+  let hash = 2166136261;
+  for (const character of value) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 export interface RentalRepository {
   getAvailableBooks(currentUserId: string): Promise<AvailableBook[]>;
   createLoanRequest(input: CreateLoanRequestInput): Promise<string>;
+  createLoanRequests(input: { bookIds: string[]; borrowerId: string }): Promise<string[]>;
+  getBorrowedRentals(borrowerId: string): Promise<BorrowedRental[]>;
   getLentBooks(ownerId: string): Promise<LentBook[]>;
 }
 
@@ -27,76 +43,203 @@ class FirestoreRentalRepository implements RentalRepository {
     const snapshot = await getDocs(query(collection(db, 'books'), where('isLendable', '==', true)));
     // 등록자 본인을 포함한 모든 사용자가 대여 가능 책을 둘러볼 수 있습니다.
     // 자기 책 대여 신청 차단은 createLoanRequest와 화면 버튼에서 별도로 처리합니다.
-    const available = snapshot.docs.filter((book) => book.data().status === 'AVAILABLE');
-    const ownerIds = [...new Set(available.map((book) => book.data().ownerId).filter(Boolean))];
+    const lendable = snapshot.docs.filter((book) => ['AVAILABLE', 'RESERVED', 'BORROWED'].includes(book.data().status));
+    const ownerIds = [...new Set(lendable.map((book) => book.data().ownerId).filter(Boolean))];
     const ownerNames = new Map<string, string>();
+    const ownerDepartments = new Map<string, string>();
 
     await Promise.all(
       ownerIds.map(async (ownerId) => {
         const owner = await getDoc(doc(db, 'users', ownerId));
+        const ownerData = owner.exists() ? owner.data() : undefined;
         ownerNames.set(
           ownerId,
-          owner.exists() ? owner.data().displayName ?? '서로서가 사용자' : '서로서가 사용자',
+          ownerData?.nickname ?? ownerData?.displayName ?? '서로서가 사용자',
         );
+        if (typeof ownerData?.department === 'string' && ownerData.department.trim()) {
+          ownerDepartments.set(ownerId, ownerData.department.trim());
+        }
       }),
     );
 
-    return available.map((book) =>
-      mapAvailableBook(book, ownerNames.get(book.data().ownerId) ?? '서로서가 사용자'),
+    return lendable.map((book) =>
+      mapAvailableBook(
+        book,
+        ownerNames.get(book.data().ownerId) ?? '서로서가 사용자',
+        ownerDepartments.get(book.data().ownerId),
+      ),
     );
   }
 
   async createLoanRequest({ bookId, borrowerId }: CreateLoanRequestInput): Promise<string> {
+    const requestIds = await this.createLoanRequests({ bookIds: [bookId], borrowerId });
+    return requestIds[0];
+  }
+
+  async createLoanRequests({ bookIds, borrowerId }: { bookIds: string[]; borrowerId: string }): Promise<string[]> {
     if (!borrowerId) throw new Error('AUTH_REQUIRED');
-    const bookReference = doc(db, 'books', bookId);
-    const requestReference = doc(collection(db, 'loanRequests'));
-    const chatReference = doc(db, 'chatRooms', requestReference.id);
+    const uniqueBookIds = [...new Set(bookIds)].filter(Boolean);
+    if (uniqueBookIds.length === 0) throw new Error('BOOK_REQUIRED');
+    if (uniqueBookIds.length > 3) throw new Error('TOO_MANY_LOAN_REQUESTS');
+    const representative = await getDoc(doc(db, 'books', uniqueBookIds[0]));
+    if (!representative.exists()) throw new Error('BOOK_NOT_FOUND');
+    const existingRequests = await getDocs(query(collection(db, 'loanRequests'), where('borrowerId', '==', borrowerId)));
+    const hasLegacyDuplicate = existingRequests.docs.some((request) =>
+      uniqueBookIds.includes(request.data().bookId)
+      && ['REQUESTED', 'SCHEDULED', 'ACCEPTED', 'BORROWED'].includes(request.data().status),
+    );
+    if (hasLegacyDuplicate) throw new Error('LOAN_REQUEST_ALREADY_EXISTS');
+    const normalizedTitle = normalizeBookTitle(representative.data().title);
+    const groupReference = doc(db, 'activeLoanRequestGroups', `${borrowerId}_${stableTitleKey(normalizedTitle)}`);
+    const requests = uniqueBookIds.map((bookId) => {
+      const requestReference = doc(collection(db, 'loanRequests'));
+      return {
+        bookId,
+        bookReference: doc(db, 'books', bookId),
+        requestReference,
+        chatReference: doc(db, 'chatRooms', requestReference.id),
+        lockReference: doc(db, 'activeLoanRequestLocks', `${borrowerId}_${bookId}`),
+      };
+    });
 
     await runTransaction(db, async (transaction) => {
-      const book = await transaction.get(bookReference);
-      if (!book.exists()) throw new Error('BOOK_NOT_FOUND');
-      const bookData = book.data();
-      if (bookData.ownerId === borrowerId) throw new Error('CANNOT_BORROW_OWN_BOOK');
-      if (!bookData.isLendable || bookData.status !== 'AVAILABLE') {
-        throw new Error('BOOK_NOT_AVAILABLE');
-      }
+      const [bookSnapshots, lockSnapshots, groupSnapshot] = await Promise.all([
+        Promise.all(requests.map((item) => transaction.get(item.bookReference))),
+        Promise.all(requests.map((item) => transaction.get(item.lockReference))),
+        transaction.get(groupReference),
+      ]);
+      const normalizedTitles = new Set<string>();
 
-      transaction.set(requestReference, {
-        requestId: requestReference.id,
-        bookId,
-        ownerId: bookData.ownerId,
-        borrowerId,
-        chatRoomId: chatReference.id,
-        status: 'REQUESTED',
-        lendingPlace: bookData.lendingPlace ?? null,
-        requestedAt: serverTimestamp(),
-        respondedAt: null,
-        dueAt: null,
-        returnedAt: null,
-        updatedAt: serverTimestamp(),
+      requests.forEach((item, index) => {
+        const book = bookSnapshots[index];
+        const lock = lockSnapshots[index];
+        if (!book.exists()) throw new Error('BOOK_NOT_FOUND');
+        if (lock.exists() && lock.data().active === true) throw new Error('LOAN_REQUEST_ALREADY_EXISTS');
+        const bookData = book.data();
+        if (bookData.ownerId === borrowerId) throw new Error('CANNOT_BORROW_OWN_BOOK');
+        if (!bookData.isLendable || bookData.status !== 'AVAILABLE') throw new Error('BOOK_NOT_AVAILABLE');
+        normalizedTitles.add(normalizeBookTitle(bookData.title));
       });
-      transaction.set(chatReference, {
-        chatRoomId: chatReference.id,
-        requestId: requestReference.id,
-        bookId,
-        ownerId: bookData.ownerId,
+      if (normalizedTitles.size > 1 || !normalizedTitles.has(normalizedTitle)) throw new Error('LOAN_REQUEST_TITLES_MUST_MATCH');
+      const previousGroupData = groupSnapshot.exists() ? groupSnapshot.data() : undefined;
+      const activeBookIds = Array.isArray(previousGroupData?.activeBookIds)
+        ? previousGroupData.activeBookIds.filter((value): value is string => typeof value === 'string')
+        : [];
+      if (activeBookIds.length + requests.length > 3) throw new Error('TOO_MANY_ACTIVE_LOAN_REQUESTS');
+
+      requests.forEach((item, index) => {
+        const bookData = bookSnapshots[index].data()!;
+        const ownerSettingsReference = doc(db, 'chatRooms', item.chatReference.id, 'memberSettings', bookData.ownerId);
+        const borrowerSettingsReference = doc(db, 'chatRooms', item.chatReference.id, 'memberSettings', borrowerId);
+        transaction.set(item.requestReference, {
+          requestId: item.requestReference.id, bookId: item.bookId, ownerId: bookData.ownerId, borrowerId,
+          chatRoomId: item.chatReference.id, status: 'REQUESTED', lendingPlace: bookData.lendingPlace ?? null,
+          requestGroupSize: requests.length, requestedAt: serverTimestamp(), respondedAt: null, dueAt: null,
+          returnedAt: null, updatedAt: serverTimestamp(),
+        });
+        transaction.set(item.lockReference, {
+          borrowerId, bookId: item.bookId, requestId: item.requestReference.id, active: true,
+          createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        });
+        transaction.set(item.chatReference, {
+          chatRoomId: item.chatReference.id, requestId: item.requestReference.id, bookId: item.bookId,
+          ownerId: bookData.ownerId, borrowerId, participantIds: [bookData.ownerId, borrowerId],
+          bookSnapshot: { title: bookData.title ?? '', author: bookData.author ?? '', coverUrl: bookData.coverUrl ?? '' },
+          lastMessage: '대여 신청이 도착했어요.', lastMessageSenderId: borrowerId, lastMessageAt: serverTimestamp(),
+          lastReadAtByUser: {}, unreadCountByUser: { [bookData.ownerId]: 1, [borrowerId]: 0 },
+          createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        });
+        transaction.set(ownerSettingsReference, { userId: bookData.ownerId, active: true, notificationsMuted: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+        transaction.set(borrowerSettingsReference, { userId: borrowerId, active: true, notificationsMuted: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+      });
+      transaction.set(groupReference, {
         borrowerId,
-        participantIds: [bookData.ownerId, borrowerId],
-        bookSnapshot: {
-          title: bookData.title ?? '',
-          author: bookData.author ?? '',
-          coverUrl: bookData.coverUrl ?? '',
-        },
-        lastMessage: '대여 신청이 도착했어요.',
-        lastMessageSenderId: borrowerId,
-        lastMessageAt: serverTimestamp(),
-        lastReadAtByUser: {},
-        unreadCountByUser: { [bookData.ownerId]: 1, [borrowerId]: 0 },
-        createdAt: serverTimestamp(),
+        normalizedTitle,
+        activeBookIds: [...activeBookIds, ...requests.map((item) => item.bookId)],
+        activeRequestIds: [
+          ...(Array.isArray(previousGroupData?.activeRequestIds) ? previousGroupData.activeRequestIds.filter((value): value is string => typeof value === 'string') : []),
+          ...requests.map((item) => item.requestReference.id),
+        ],
+        createdAt: previousGroupData?.createdAt ?? serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
     });
-    return requestReference.id;
+    return requests.map((item) => item.requestReference.id);
+  }
+
+  async getBorrowedRentals(borrowerId: string): Promise<BorrowedRental[]> {
+    if (!borrowerId) return [];
+    const snapshot = await getDocs(
+      query(collection(db, 'loanRequests'), where('borrowerId', '==', borrowerId)),
+    );
+    const requests = snapshot.docs.filter((request) =>
+      ['BORROWED', 'RETURNED', 'COMPLETED'].includes(request.data().status),
+    );
+
+    const rentals = await Promise.all(requests.map(async (request): Promise<BorrowedRental> => {
+      const data = request.data();
+      const chatRoomId = typeof data.chatRoomId === 'string' && data.chatRoomId
+        ? data.chatRoomId
+        : request.id;
+      const [bookSnapshot, ownerSnapshot, chatSnapshot] = await Promise.all([
+        typeof data.bookId === 'string' && data.bookId
+          ? getDoc(doc(db, 'books', data.bookId))
+          : Promise.resolve(null),
+        typeof data.ownerId === 'string' && data.ownerId
+          ? getDoc(doc(db, 'users', data.ownerId))
+          : Promise.resolve(null),
+        getDoc(doc(db, 'chatRooms', chatRoomId)),
+      ]);
+      const bookData = bookSnapshot?.exists() ? bookSnapshot.data() : undefined;
+      const ownerData = ownerSnapshot?.exists() ? ownerSnapshot.data() : undefined;
+      const chatData = chatSnapshot.exists() ? chatSnapshot.data() : undefined;
+      const chatBook = chatData?.bookSnapshot && typeof chatData.bookSnapshot === 'object'
+        ? chatData.bookSnapshot as Record<string, unknown>
+        : {};
+      const publishedDate = toIsoString(bookData?.publishedDate);
+      const startedAt = toIsoString(data.loanAt ?? data.respondedAt ?? data.requestedAt)
+        ?? new Date(0).toISOString();
+      const studentNumber = typeof ownerData?.studentNumber === 'string'
+        ? ownerData.studentNumber
+        : typeof ownerData?.studentId === 'string'
+          ? ownerData.studentId
+          : undefined;
+
+      return {
+        id: request.id,
+        chatRoomId,
+        status: ['RETURNED', 'COMPLETED'].includes(data.status) ? 'RETURNED' : 'BORROWED',
+        startedAt,
+        dueAt: toIsoString(data.dueAt),
+        returnedAt: toIsoString(data.returnedAt ?? (data.status === 'COMPLETED' ? data.updatedAt : undefined)),
+        book: {
+          id: typeof data.bookId === 'string' ? data.bookId : '',
+          title: typeof bookData?.title === 'string'
+            ? bookData.title
+            : typeof chatBook.title === 'string' ? chatBook.title : '책 정보 없음',
+          author: typeof bookData?.author === 'string'
+            ? bookData.author
+            : typeof chatBook.author === 'string' ? chatBook.author : '저자 미상',
+          publisher: typeof bookData?.publisher === 'string' ? bookData.publisher : undefined,
+          publishedYear: publishedDate ? new Date(publishedDate).getFullYear() : undefined,
+          coverUrl: typeof bookData?.coverUrl === 'string' && bookData.coverUrl
+            ? bookData.coverUrl
+            : typeof chatBook.coverUrl === 'string' && chatBook.coverUrl ? chatBook.coverUrl : undefined,
+        },
+        owner: {
+          id: typeof data.ownerId === 'string' ? data.ownerId : '',
+          displayName: ownerData?.nickname ?? ownerData?.displayName ?? '서로서가 사용자',
+          department: typeof ownerData?.department === 'string' && ownerData.department.trim()
+            ? ownerData.department.trim()
+            : undefined,
+          studentNumber,
+        },
+      };
+    }));
+
+    return rentals.sort((first, second) =>
+      new Date(second.startedAt).getTime() - new Date(first.startedAt).getTime(),
+    );
   }
 
   async getLentBooks(ownerId: string): Promise<LentBook[]> {
