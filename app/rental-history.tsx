@@ -26,7 +26,7 @@ function HistoryCard({ item }: { item: RentalHistoryItem }) {
     >
       <View style={[styles.statusBar, borrower ? styles.borrowedBorder : styles.lentBorder]}>
         <Text style={[styles.statusText, borrower ? styles.borrowedText : styles.lentText]}>{scheduled ? '대여 예정' : borrowed ? `대여중 · ${formatReturnDday(item.dueAt)}` : '반납 완료'}</Text>
-        <Text style={[styles.roleText, borrower ? styles.borrowedText : styles.lentText]}>{borrower ? '빌릴래요' : '빌려줄래요'}</Text>
+        <Text style={[styles.roleText, borrower ? styles.borrowedText : styles.lentText]}>{borrower ? '빌렸어요!' : '빌려줬어요!'}</Text>
       </View>
       <View style={styles.bookRow}>
         {item.book.coverUrl ? <Image source={{ uri: item.book.coverUrl }} style={styles.cover} /> : (

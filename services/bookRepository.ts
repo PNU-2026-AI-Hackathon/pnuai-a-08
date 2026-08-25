@@ -17,6 +17,12 @@ import { mapBook } from '@/services/firestoreMappers';
 
 export type HomeBooks = { borrowed: Book[]; owned: Book[] };
 
+function dateValue(value?: string) {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
 export type CreateBookInput = {
   title: string;
   author: string;
@@ -57,8 +63,12 @@ class FirestoreBookRepository implements BookRepository {
       getDocs(query(books, where('borrowerId', '==', userId))),
     ]);
     return {
-      owned: ownedSnapshot.docs.map((snapshot) => mapBook(snapshot)),
-      borrowed: borrowedSnapshot.docs.map((snapshot) => mapBook(snapshot)),
+      owned: ownedSnapshot.docs
+        .map((snapshot) => mapBook(snapshot))
+        .sort((first, second) => dateValue(second.createdAt) - dateValue(first.createdAt)),
+      borrowed: borrowedSnapshot.docs
+        .map((snapshot) => mapBook(snapshot))
+        .sort((first, second) => dateValue(second.rentalStartsAt ?? second.updatedAt) - dateValue(first.rentalStartsAt ?? first.updatedAt)),
     };
   }
 

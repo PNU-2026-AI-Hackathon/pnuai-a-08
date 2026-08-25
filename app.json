@@ -19,7 +19,25 @@
         }
       ],
       "@react-native-google-signin/google-signin",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ],
+      [
+        "rn-mlkit-ocr",
+        {
+          "ocrModels": [
+            "korean",
+            "latin"
+          ],
+          "ocrUseBundled": true
+        }
+      ]
     ],
     "android": {
       "package": "com.seoroseoga.app",

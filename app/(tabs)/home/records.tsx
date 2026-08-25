@@ -102,7 +102,7 @@ export default function ReadingRecordsScreen() {
   const groups = useMemo(() => {
     const grouped = new Map<string, ReadingLibraryItem[]>();
     items.forEach((item) => {
-      const key = monthKey(item.record?.startedAt ?? item.book.createdAt);
+      const key = monthKey(item.book.createdAt);
       grouped.set(key, [...(grouped.get(key) ?? []), item]);
     });
     return [...grouped.entries()].sort(([first], [second]) => {

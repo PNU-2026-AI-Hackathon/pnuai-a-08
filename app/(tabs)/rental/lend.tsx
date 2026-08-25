@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
@@ -23,10 +24,14 @@ import { formatPublishedDate, PublishedDatePicker } from '@/components/Published
 import { useLentBooks } from '@/hooks/useLentBooks';
 import { MeetingPlace } from '@/models/ChatMessage';
 import { LentBook, LentBookStatus } from '@/models/LentBook';
+import { bookCoverRepository } from '@/services/bookCoverRepository';
+import { bookOcrService } from '@/services/bookOcrService';
 import { bookRepository } from '@/services/bookRepository';
+import { GoogleBookCandidate, googleBooksRepository } from '@/services/googleBooksRepository';
 import { formatReturnDday } from '@/utils/rentalDate';
 
 type Mode = 'register' | 'list';
+type CoverSource = 'google' | 'local';
 
 const campus = {
   placeId: 'pnu-jangjeon',
@@ -34,12 +39,19 @@ const campus = {
   address: '부산광역시 금정구 부산대학로63번길 2',
 };
 
+function parseGooglePublishedDate(value?: string) {
+  if (!value) return null;
+  const [year, month = '1', day = '1'] = value.split('-');
+  const date = new Date(Number(year), Number(month) - 1, Number(day), 12);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function ModeSwitch({ mode, onChange }: { mode: Mode; onChange: (mode: Mode) => void }) {
   return (
     <View style={styles.modeRow}>
       {([
         ['register', '빌려주기'],
-        ['list', '대여 목록'],
+        ['list', '빌려준 책들'],
       ] as const).map(([value, label]) => (
         <Pressable
           key={value}
@@ -107,7 +119,7 @@ function LendingCard({ book }: { book: LentBook }) {
       )}
       <View style={styles.bookInfo}>
         <Text numberOfLines={1} style={styles.bookTitle}>{book.title}</Text>
-        <Text numberOfLines={1} style={styles.borrower}>{book.borrowerName ? `${book.borrowerName} 님` : book.author}</Text>
+        <Text numberOfLines={1} style={styles.borrower}>{book.borrowerName ? `${book.borrowerName}님이 현재 빌렸어요!` : book.author}</Text>
         <Text numberOfLines={1} style={styles.bookDetail}>{detail}</Text>
       </View>
       <View style={[styles.statusChip, { borderColor: status.color, backgroundColor: status.background }]}>
@@ -129,6 +141,14 @@ export default function LendBookScreen() {
   const [lendingPlace, setLendingPlace] = useState<MeetingPlace>(campus);
   const [placePickerOpen, setPlacePickerOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [coverLocalUri, setCoverLocalUri] = useState<string>();
+  const [ocrCandidates, setOcrCandidates] = useState<string[]>([]);
+  const [bookCandidates, setBookCandidates] = useState<GoogleBookCandidate[]>([]);
+  const [selectedBookInfo, setSelectedBookInfo] = useState<GoogleBookCandidate>();
+  const [coverSource, setCoverSource] = useState<CoverSource>('local');
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [bookSearchAttempted, setBookSearchAttempted] = useState(false);
   const { books, isLoading, error, reload } = useLentBooks(user?.uid ?? '');
   const pageWidth = Math.min(width, 620);
   const contentWidth = Math.min(338, width - 48);
@@ -136,6 +156,75 @@ export default function LendBookScreen() {
     requested: books.filter((book) => book.status === 'REQUESTED').length,
     borrowed: books.filter((book) => book.status === 'BORROWED' || book.status === 'SCHEDULED').length,
   }), [books]);
+
+  const applyBookCandidate = (candidate: GoogleBookCandidate) => {
+    setSelectedBookInfo(candidate);
+    if (candidate.coverUrl) setCoverSource('google');
+    setTitle(candidate.title);
+    setAuthor(candidate.author);
+    setPublisher(candidate.publisher ?? '');
+    const nextPublishedDate = parseGooglePublishedDate(candidate.publishedDate);
+    if (nextPublishedDate) setPublishedDate(nextPublishedDate);
+    setBookCandidates([]);
+    setOcrCandidates([]);
+    setBookSearchAttempted(false);
+  };
+
+  const searchGoogleBooks = async (keyword = title) => {
+    const query = keyword.trim();
+    if (!query) {
+      Alert.alert('책 제목을 입력해주세요', '검색할 책 제목을 먼저 입력해주세요.');
+      return;
+    }
+    setImportLoading(true);
+    setImportError(null);
+    setBookSearchAttempted(true);
+    try {
+      const results = await googleBooksRepository.search(query);
+      setBookCandidates(results);
+      if (results.length === 0) setImportError('검색된 책이 없어요.');
+    } catch (searchError) {
+      console.error('Google Books 검색 실패:', searchError);
+      setImportError('책 정보를 불러오지 못했어요.');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const useManualEntry = () => {
+    setBookCandidates([]);
+    setImportError(null);
+    setSelectedBookInfo(undefined);
+    setCoverSource('local');
+    setBookSearchAttempted(false);
+  };
+
+  const pickImageAndImport = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
+    if (result.canceled || !result.assets[0]) return;
+
+    const uri = result.assets[0].uri;
+    setCoverLocalUri(uri);
+    if (!selectedBookInfo?.coverUrl) setCoverSource('local');
+    setImportLoading(true);
+    setImportError(null);
+    setBookCandidates([]);
+    setBookSearchAttempted(false);
+    try {
+      const candidates = await bookOcrService.extractTitleCandidates(uri);
+      setOcrCandidates(candidates);
+      const first = candidates[0];
+      if (!first) {
+        setImportError('책 제목 후보를 찾지 못했어요.');
+        return;
+      }
+    } catch (ocrError) {
+      console.error('OCR 실패:', ocrError);
+      setImportError('이미지에서 책 정보를 읽지 못했어요.');
+    } finally {
+      setImportLoading(false);
+    }
+  };
 
   const registerBook = async () => {
     if (!user) {
@@ -149,11 +238,20 @@ export default function LendBookScreen() {
 
     setSaving(true);
     try {
+      const selectedGoogleCoverUrl = coverSource === 'google' ? selectedBookInfo?.coverUrl : undefined;
+      const cover = !selectedGoogleCoverUrl && coverLocalUri
+        ? await bookCoverRepository.upload(user.uid, coverLocalUri)
+        : undefined;
       await bookRepository.createBook(user.uid, {
         title: title.trim(),
         author: author.trim(),
         publisher: publisher.trim(),
         publishedDate: publishedDate.toISOString(),
+        isbn: selectedBookInfo?.isbn,
+        description: selectedBookInfo?.description,
+        totalPages: selectedBookInfo?.totalPages,
+        coverUrl: selectedGoogleCoverUrl ?? cover?.url,
+        coverStoragePath: cover?.storagePath,
         isLendable: true,
         lendingPlace: {
           placeId: lendingPlace.placeId ?? 'custom-lending-place',
@@ -171,6 +269,12 @@ export default function LendBookScreen() {
       setAuthor('');
       setPublisher('');
       setPublishedDate(null);
+      setCoverLocalUri(undefined);
+      setSelectedBookInfo(undefined);
+      setCoverSource('local');
+      setOcrCandidates([]);
+      setBookCandidates([]);
+      setBookSearchAttempted(false);
       await reload();
       setMode('list');
     } catch (registerError) {
@@ -183,7 +287,7 @@ export default function LendBookScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <KeyboardAvoidingView style={[styles.page, { width: pageWidth }]} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={[styles.page, { width: pageWidth }]} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.topBar}>
           <Pressable accessibilityRole="button" accessibilityLabel="뒤로 가기" hitSlop={12} onPress={() => router.back()} style={styles.topIcon}>
             <Ionicons name="arrow-back" size={23} color="#1C1B1F" />
@@ -195,26 +299,74 @@ export default function LendBookScreen() {
         </View>
 
         <ModeSwitch mode={mode} onChange={setMode} />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`대여 장소 선택, 현재 ${lendingPlace.name}`}
-          onPress={() => setPlacePickerOpen(true)}
-          style={({ pressed }) => [styles.campusRow, pressed && styles.pressed]}
-        >
-          <Ionicons name="location-outline" size={21} color="#A0B243" />
-          <View style={styles.campusCopy}>
-            <Text numberOfLines={1} style={styles.campusText}>{lendingPlace.name}</Text>
-            <Text numberOfLines={1} style={styles.campusAddress}>{lendingPlace.address}</Text>
-          </View>
-          <Text style={styles.placeChange}>장소 선택</Text>
-          <Ionicons name="chevron-forward" size={17} color="#A0B243" />
-        </Pressable>
-
         {mode === 'register' ? (
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.formScroll}>
             <View style={{ width: contentWidth }}>
+              <Pressable disabled={importLoading} onPress={() => void pickImageAndImport()} style={({ pressed }) => [styles.coverPicker, (pressed || importLoading) && styles.pressed]}>
+                {coverLocalUri ? (
+                  <Image source={{ uri: coverLocalUri }} style={styles.coverPreview} resizeMode="cover" />
+                ) : (
+                  <>
+                    <Ionicons name="images-outline" size={28} color="#5D442D" />
+                    <Text style={styles.coverPickerText}>사진 선택</Text>
+                    <Text style={styles.coverPickerHint}>OCR 후보를 뽑고 표지로도 사용할게요</Text>
+                  </>
+                )}
+              </Pressable>
+              {importLoading ? <ActivityIndicator color="#A0B243" style={styles.importStatus} /> : null}
+              {importError ? <Text style={styles.importError}>{importError}</Text> : null}
+              {ocrCandidates.length > 0 ? (
+                <View style={styles.candidateSection}>
+                  <Text style={styles.candidateTitle}>OCR 제목 후보</Text>
+                  {ocrCandidates.map((candidate) => (
+                    <Pressable key={candidate} onPress={() => setTitle(candidate)} style={styles.ocrCandidate}>
+                      <Text style={styles.ocrCandidateText}>{candidate}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
               <Text style={styles.formTitle}>책 정보를 입력해 주세요</Text>
               <Field label="책 제목" value={title} onChangeText={setTitle} placeholder="제목을 입력하세요." />
+              <Pressable disabled={importLoading} onPress={() => void searchGoogleBooks()} style={({ pressed }) => [styles.loadInfoButton, (pressed || importLoading) && styles.pressed]}>
+                <Text style={styles.loadInfoText}>제목으로 정보 불러오기</Text>
+              </Pressable>
+              {bookSearchAttempted && !importLoading && bookCandidates.length === 0 ? (
+                <Pressable onPress={useManualEntry} style={styles.manualEntryButton}>
+                  <Text style={styles.manualEntryText}>응답이 없어요. 그냥 직접 입력할게요</Text>
+                </Pressable>
+              ) : null}
+              {bookCandidates.length > 0 ? (
+                <View style={styles.candidateSection}>
+                  <Text style={styles.candidateTitle}>책 후보</Text>
+                  {bookCandidates.map((candidate) => (
+                    <Pressable key={`${candidate.title}-${candidate.isbn ?? candidate.author}`} onPress={() => applyBookCandidate(candidate)} style={styles.bookCandidate}>
+                      {candidate.coverUrl ? <Image source={{ uri: candidate.coverUrl }} style={styles.candidateCover} /> : <View style={styles.candidateCoverFallback}><Ionicons name="book-outline" size={18} color="#7A8B26" /></View>}
+                      <View style={styles.candidateCopy}>
+                        <Text numberOfLines={1} style={styles.candidateBookTitle}>{candidate.title}</Text>
+                        <Text numberOfLines={1} style={styles.candidateMeta}>{candidate.author || '저자 미상'} {candidate.publisher ? `· ${candidate.publisher}` : ''}</Text>
+                      </View>
+                    </Pressable>
+                  ))}
+                  <Pressable onPress={useManualEntry} style={styles.manualEntryButton}>
+                    <Text style={styles.manualEntryText}>원하는 책이 없어요. 직접 입력할게요</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+              {selectedBookInfo?.coverUrl && coverLocalUri ? (
+                <View style={styles.coverChoice}>
+                  <Text style={styles.candidateTitle}>저장할 표지</Text>
+                  <View style={styles.coverChoiceRow}>
+                    <Pressable onPress={() => setCoverSource('google')} style={[styles.coverChoiceOption, coverSource === 'google' && styles.coverChoiceActive]}>
+                      <Image source={{ uri: selectedBookInfo.coverUrl }} style={styles.coverChoiceImage} />
+                      <Text style={styles.coverChoiceText}>Google Books</Text>
+                    </Pressable>
+                    <Pressable onPress={() => setCoverSource('local')} style={[styles.coverChoiceOption, coverSource === 'local' && styles.coverChoiceActive]}>
+                      <Image source={{ uri: coverLocalUri }} style={styles.coverChoiceImage} />
+                      <Text style={styles.coverChoiceText}>내 사진</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
               <Field label="작가" value={author} onChangeText={setAuthor} placeholder="작가를 입력하세요." />
               <Field label="출판사" value={publisher} onChangeText={setPublisher} placeholder="출판사를 입력하세요." />
               <View style={styles.field}>
@@ -236,6 +388,21 @@ export default function LendBookScreen() {
               {calendarOpen ? (
                 <PublishedDatePicker selected={publishedDate} onSelect={setPublishedDate} />
               ) : null}
+              <Text style={styles.placeFieldLabel}>선호 대여 위치</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`대여 장소 선택, 현재 ${lendingPlace.name}`}
+                onPress={() => setPlacePickerOpen(true)}
+                style={({ pressed }) => [styles.campusRow, styles.formCampusRow, pressed && styles.pressed]}
+              >
+                <Ionicons name="location-outline" size={21} color="#A0B243" />
+                <View style={styles.campusCopy}>
+                  <Text numberOfLines={1} style={styles.campusText}>{lendingPlace.name}</Text>
+                  <Text numberOfLines={1} style={styles.campusAddress}>{lendingPlace.address}</Text>
+                </View>
+                <Text style={styles.placeChange}>장소 선택</Text>
+                <Ionicons name="chevron-forward" size={17} color="#A0B243" />
+              </Pressable>
               <View style={styles.notice}>
                 <Text style={styles.noticeText}>등록 후 대여 가능 사용자가 검색할 수 있어요.</Text>
               </View>
@@ -294,14 +461,44 @@ const styles = StyleSheet.create({
   modeText: { color: '#5D442D', fontSize: 12, fontWeight: '800' },
   modeTextActive: { color: '#FFFFFF' },
   campusRow: { minHeight: 54, flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, marginHorizontal: 24, paddingHorizontal: 12, borderWidth: 1, borderColor: '#E3E8C9', borderRadius: 12, backgroundColor: '#FAFCEB' },
+  formCampusRow: { marginHorizontal: 0, marginTop: 12 },
   campusCopy: { flex: 1, minWidth: 0 },
   campusText: { color: '#171513', fontSize: 13, fontWeight: '800' },
   campusAddress: { marginTop: 3, color: '#7A746E', fontSize: 10 },
   placeChange: { color: '#7A8B26', fontSize: 11, fontWeight: '800' },
   formScroll: { alignItems: 'center', paddingTop: 25, paddingBottom: 32 },
   formTitle: { color: '#362E29', fontSize: 20, lineHeight: 28, fontWeight: '800', marginBottom: 12 },
+  importButton: { minHeight: 42, marginBottom: 9, borderWidth: 1.5, borderColor: '#A2B155', borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FFFFFF' },
+  importButtonText: { color: '#6E7A30', fontSize: 13, fontWeight: '800' },
+  coverPicker: { minHeight: 88, marginBottom: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: '#A2B155', borderRadius: 14, alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: '#FFFCF5' },
+  coverPickerText: { color: '#5D442D', fontSize: 13, fontWeight: '800' },
+  coverPickerHint: { color: '#85818A', fontSize: 11 },
+  coverPreview: { width: 58, height: 82, borderRadius: 8, backgroundColor: '#F4F0E8' },
+  loadInfoButton: { minHeight: 38, marginTop: 8, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, backgroundColor: '#F7F5EB' },
+  loadInfoText: { color: '#6E7A30', fontSize: 13, fontWeight: '800' },
+  importStatus: { marginVertical: 8 },
+  importError: { marginTop: 8, color: '#B64E43', fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  candidateSection: { marginTop: 12, gap: 8 },
+  candidateTitle: { color: '#151310', fontSize: 13, fontWeight: '900' },
+  ocrCandidate: { minHeight: 34, borderRadius: 10, justifyContent: 'center', paddingHorizontal: 12, backgroundColor: '#F1F5DC' },
+  ocrCandidateText: { color: '#4F5630', fontSize: 13, fontWeight: '800' },
+  bookCandidate: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#E5E2DC', borderRadius: 12, padding: 10, backgroundColor: '#FFF' },
+  manualEntryButton: { minHeight: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, backgroundColor: '#F7F5EB' },
+  manualEntryText: { color: '#5D442D', fontSize: 12, fontWeight: '800' },
+  coverChoice: { marginTop: 14, gap: 8 },
+  coverChoiceRow: { flexDirection: 'row', gap: 10 },
+  coverChoiceOption: { flex: 1, minHeight: 104, borderWidth: 1, borderColor: '#E5E2DC', borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: '#FFF' },
+  coverChoiceActive: { borderColor: '#A2B155', backgroundColor: '#F7FAE8' },
+  coverChoiceImage: { width: 42, height: 58, borderRadius: 5, backgroundColor: '#F4F0E8' },
+  coverChoiceText: { color: '#4F5630', fontSize: 12, fontWeight: '800' },
+  candidateCover: { width: 36, height: 52, borderRadius: 5, backgroundColor: '#F4F0E8' },
+  candidateCoverFallback: { width: 36, height: 52, borderRadius: 5, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F4F0E8' },
+  candidateCopy: { flex: 1, minWidth: 0 },
+  candidateBookTitle: { color: '#222', fontSize: 13, fontWeight: '900' },
+  candidateMeta: { marginTop: 4, color: '#777', fontSize: 11 },
   field: { marginTop: 11 },
   fieldLabel: { color: '#151310', fontSize: 15, lineHeight: 26, fontWeight: '800', marginBottom: 6, marginLeft: 6 },
+  placeFieldLabel: { marginTop: 14, marginLeft: 6, marginBottom: 6, color: '#151310', fontSize: 15, lineHeight: 26, fontWeight: '800' },
   input: { width: '100%', height: 42, borderWidth: 1, borderColor: 'rgba(0,0,0,0.5)', borderRadius: 7, paddingHorizontal: 9, paddingVertical: 0, color: '#312A25', fontSize: 14 },
   dateInput: { width: '100%', height: 45, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.5)', borderRadius: 10, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center' },
   dateInputSelected: { borderColor: '#B7D52C' },

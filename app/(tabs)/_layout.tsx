@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Redirect, Tabs } from 'expo-router';
+import { Redirect, router, Tabs } from 'expo-router';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -34,6 +34,11 @@ export default function TabLayout() {
   return (
     <Tabs
       initialRouteName="home"
+      screenListeners={({ route }) => ({
+        tabPress: () => {
+          if (route.name === 'home') router.replace('/(tabs)/home');
+        },
+      })}
       screenOptions={({ route }) => ({
         headerShown: false,
         tabBarActiveTintColor: colors.text,

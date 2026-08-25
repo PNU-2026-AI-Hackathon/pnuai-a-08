@@ -136,7 +136,7 @@ function RentalListCard({ rental }: { rental: BorrowedRental }) {
               ? `대여 예정 · ${formatDate(rental.startedAt)} 대여`
               : `대여중 · ${formatReturnDday(rental.dueAt)}`}
         </Text>
-        <Text style={[styles.rentalModeText, returned && styles.rentalModeTextReturned]}>빌릴래요</Text>
+        <Text style={[styles.rentalModeText, returned && styles.rentalModeTextReturned]}>빌렸어요!</Text>
       </View>
       <View style={styles.rentalBookRow}>
         {rental.book.coverUrl ? (
@@ -285,7 +285,7 @@ export default function BorrowBrowseScreen() {
           <>
             <View style={styles.segmentedControl}>
               <Pressable onPress={() => setMode('BROWSE')} style={[styles.segment, mode === 'BROWSE' && styles.segmentActive]}><Text style={[styles.segmentText, mode === 'BROWSE' && styles.segmentTextActive]}>둘러보기</Text></Pressable>
-              <Pressable onPress={() => setMode('LIST')} style={[styles.segment, mode === 'LIST' && styles.segmentActive]}><Text style={[styles.segmentText, mode === 'LIST' && styles.segmentTextActive]}>대여 목록</Text></Pressable>
+              <Pressable onPress={() => setMode('LIST')} style={[styles.segment, mode === 'LIST' && styles.segmentActive]}><Text style={[styles.segmentText, mode === 'LIST' && styles.segmentTextActive]}>대여한 책들</Text></Pressable>
             </View>
             {mode === 'BROWSE' ? <View style={styles.placeRow}><Ionicons name="location-outline" size={22} color="#A0B243" /><Text numberOfLines={1} style={styles.placeName}>{selectedBook?.lendingPlace.name ?? '부산대학교 장전캠퍼스'}</Text></View> : null}
           </>

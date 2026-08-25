@@ -67,6 +67,7 @@ export default function MyPageScreen() {
         <MenuCard title="로그아웃" description="현재 기기에서 로그아웃" onPress={() => setLogoutOpen(true)} />
         <MenuCard title="회원 탈퇴" description="서로서가 서비스 탈퇴" onPress={() => router.push('/withdraw')} />
         <MenuCard title="대여 내역" description="완료된 대여 기록을 조회합니다." onPress={() => router.push('/rental-history')} />
+        <MenuCard title="서로 AI 대화 기록" description="책과 매거진에서 나눈 AI 대화를 조회합니다." onPress={() => router.push('/ai-history')} />
       </ScrollView>
 
       <Modal visible={logoutOpen} transparent animationType="slide" onRequestClose={() => setLogoutOpen(false)}>

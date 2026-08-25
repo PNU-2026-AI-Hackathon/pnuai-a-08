@@ -4,7 +4,15 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { radius } from '@/constants/theme';
 
-export function MagazineAiButton({ title, description }: { title: string; description: string }) {
+export function MagazineAiButton({
+  magazineId,
+  title,
+  description,
+}: {
+  magazineId: string;
+  title: string;
+  description: string;
+}) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -12,7 +20,7 @@ export function MagazineAiButton({ title, description }: { title: string; descri
       onPress={() =>
         router.push({
           pathname: '/(tabs)/home/ai',
-          params: { contextTitle: title.replaceAll('\n', ' '), contextDescription: description },
+          params: { magazineId, contextTitle: title.replaceAll('\n', ' '), contextDescription: description },
         })
       }
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}

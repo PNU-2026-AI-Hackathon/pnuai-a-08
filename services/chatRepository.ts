@@ -7,6 +7,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   onSnapshot,
   orderBy,
   query,
@@ -65,6 +66,7 @@ export interface ChatRepository {
     onMessages: (messages: ChatMessage[]) => void,
     onError: (error: Error) => void,
   ): Unsubscribe;
+  markRoomRead(roomId: string, userId: string): Promise<void>;
   createMeetingProposal(roomId: string, senderId: string, meeting: MeetingProposal): Promise<string>;
   acceptMeetingProposal(roomId: string, messageId: string, userId: string): Promise<void>;
   leaveRoom(roomId: string, userId: string): Promise<void>;
@@ -151,6 +153,14 @@ class FirestoreChatRepository implements ChatRepository {
     );
   }
 
+  private unreadUpdate(senderId: string, receiverId: string) {
+    return {
+      [`unreadCountByUser.${senderId}`]: 0,
+      [`unreadCountByUser.${receiverId}`]: increment(1),
+      [`lastReadAtByUser.${senderId}`]: serverTimestamp(),
+    };
+  }
+
   async getRooms(userId: string): Promise<ChatRoom[]> {
     if (!userId) return [];
     const snapshot = await getDocs(
@@ -204,7 +214,7 @@ class FirestoreChatRepository implements ChatRepository {
       const room = await transaction.get(roomReference);
       if (!room.exists()) throw new Error('CHAT_ROOM_NOT_FOUND');
       const participantIds = room.data().participantIds as string[] | undefined;
-      await this.assertCanCommunicate(transaction, roomReference, participantIds, senderId);
+      const receiverId = await this.assertCanCommunicate(transaction, roomReference, participantIds, senderId);
       transaction.set(messageReference, {
         messageId: messageReference.id,
         senderId,
@@ -217,6 +227,7 @@ class FirestoreChatRepository implements ChatRepository {
         lastMessageSenderId: senderId,
         lastMessageAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        ...this.unreadUpdate(senderId, receiverId),
       });
     });
     return messageReference.id;
@@ -237,7 +248,7 @@ class FirestoreChatRepository implements ChatRepository {
       const room = await transaction.get(roomReference);
       if (!room.exists()) throw new Error('CHAT_ROOM_NOT_FOUND');
       const participantIds = room.data().participantIds as string[] | undefined;
-      await this.assertCanCommunicate(transaction, roomReference, participantIds, senderId);
+      const receiverId = await this.assertCanCommunicate(transaction, roomReference, participantIds, senderId);
       transaction.set(messageReference, {
         messageId: messageReference.id,
         senderId,
@@ -264,9 +275,25 @@ class FirestoreChatRepository implements ChatRepository {
         lastMessageSenderId: senderId,
         lastMessageAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        ...this.unreadUpdate(senderId, receiverId),
       });
     });
     return messageReference.id;
+  }
+
+  async markRoomRead(roomId: string, userId: string): Promise<void> {
+    if (!roomId || !userId) return;
+    const roomReference = doc(db, 'chatRooms', roomId);
+    await runTransaction(db, async (transaction) => {
+      const room = await transaction.get(roomReference);
+      if (!room.exists()) throw new Error('CHAT_ROOM_NOT_FOUND');
+      this.otherParticipantId(room.data().participantIds as string[] | undefined, userId);
+      transaction.update(roomReference, {
+        [`unreadCountByUser.${userId}`]: 0,
+        [`lastReadAtByUser.${userId}`]: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    });
   }
 
   subscribeMessages(
@@ -362,7 +389,7 @@ class FirestoreChatRepository implements ChatRepository {
       const room = await transaction.get(roomReference);
       if (!room.exists()) throw new Error('CHAT_ROOM_NOT_FOUND');
       const participantIds = room.data().participantIds as string[] | undefined;
-      await this.assertCanCommunicate(transaction, roomReference, participantIds, senderId);
+      const receiverId = await this.assertCanCommunicate(transaction, roomReference, participantIds, senderId);
       transaction.set(messageReference, {
         messageId: messageReference.id,
         senderId,
@@ -382,6 +409,7 @@ class FirestoreChatRepository implements ChatRepository {
         lastMessageSenderId: senderId,
         lastMessageAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        ...this.unreadUpdate(senderId, receiverId),
       });
     });
     return messageReference.id;
@@ -402,7 +430,7 @@ class FirestoreChatRepository implements ChatRepository {
       const roomData = room.data();
       const messageData = message.data();
       const participantIds = roomData.participantIds as string[] | undefined;
-      await this.assertCanCommunicate(transaction, roomReference, participantIds, userId);
+      const receiverId = await this.assertCanCommunicate(transaction, roomReference, participantIds, userId);
       if (messageData.senderId === userId) throw new Error('MEETING_SENDER_CANNOT_ACCEPT');
       if (messageData.type !== 'MEETING' || !messageData.meeting) throw new Error('MEETING_NOT_FOUND');
       if (messageData.meeting.status === 'ACCEPTED') return;
@@ -470,6 +498,7 @@ class FirestoreChatRepository implements ChatRepository {
         lastMessageSenderId: userId,
         lastMessageAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        ...this.unreadUpdate(userId, receiverId),
       });
     });
   }

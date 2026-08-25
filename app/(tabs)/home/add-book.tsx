@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
@@ -8,9 +9,12 @@ import { useAuth } from '@/auth/AuthProvider';
 import { useBookDetail } from '@/hooks/useBookDetail';
 import { useReadingRecord } from '@/hooks/useReadingRecord';
 import { ReadingStatus } from '@/models/ReadingRecord';
+import { bookOcrService } from '@/services/bookOcrService';
 import { createOwnedBook, updateOwnedBook } from '@/services/bookCreationService';
+import { GoogleBookCandidate, googleBooksRepository } from '@/services/googleBooksRepository';
 
 type CalendarTarget = 'published' | 'started' | 'finished';
+type CoverSource = 'google' | 'local';
 const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
 function parseDate(value?: string) {
@@ -21,6 +25,13 @@ function parseDate(value?: string) {
 
 function formatDate(date: Date) {
   return `${date.getFullYear()}.${String(date.getMonth() + 1).padStart(2, '0')}.${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function parseGooglePublishedDate(value?: string) {
+  if (!value) return null;
+  const [year, month = '1', day = '1'] = value.split('-');
+  const date = new Date(Number(year), Number(month) - 1, Number(day), 12);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function CalendarPicker({ selected, onSelect }: { selected: Date | null; onSelect: (date: Date) => void }) {
@@ -113,6 +124,14 @@ export default function AddBookScreen() {
   const [finishedAt, setFinishedAt] = useState<Date | null>(null);
   const [rating, setRating] = useState(0);
   const [oneLineReview, setOneLineReview] = useState('');
+  const [coverLocalUri, setCoverLocalUri] = useState<string>();
+  const [ocrCandidates, setOcrCandidates] = useState<string[]>([]);
+  const [bookCandidates, setBookCandidates] = useState<GoogleBookCandidate[]>([]);
+  const [selectedBookInfo, setSelectedBookInfo] = useState<GoogleBookCandidate>();
+  const [coverSource, setCoverSource] = useState<CoverSource>('local');
+  const [importLoading, setImportLoading] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [bookSearchAttempted, setBookSearchAttempted] = useState(false);
   const [calendarTarget, setCalendarTarget] = useState<CalendarTarget | null>(null);
   const [saving, setSaving] = useState(false);
   const formWidth = Math.min(329, width - 48);
@@ -146,6 +165,79 @@ export default function AddBookScreen() {
   const calendarFor = (target: CalendarTarget) => calendarTarget === target
     ? <CalendarPicker selected={selectedCalendarDate} onSelect={chooseDate} />
     : null;
+
+  const applyBookCandidate = (candidate: GoogleBookCandidate) => {
+    setSelectedBookInfo(candidate);
+    if (candidate.coverUrl) setCoverSource('google');
+    setTitle(candidate.title);
+    setAuthor(candidate.author);
+    setPublisher(candidate.publisher ?? '');
+    const nextPublishedDate = parseGooglePublishedDate(candidate.publishedDate);
+    if (nextPublishedDate) setPublishedDate(nextPublishedDate);
+    if (candidate.totalPages) {
+      setTotalPages(String(candidate.totalPages));
+      setCurrentPage((current) => current || '0');
+    }
+    setBookCandidates([]);
+    setOcrCandidates([]);
+    setBookSearchAttempted(false);
+  };
+
+  const searchGoogleBooks = async (keyword = title) => {
+    const query = keyword.trim();
+    if (!query) {
+      Alert.alert('책 제목을 입력해주세요', '검색할 책 제목을 먼저 입력해주세요.');
+      return;
+    }
+    setImportLoading(true);
+    setImportError(null);
+    setBookSearchAttempted(true);
+    try {
+      const results = await googleBooksRepository.search(query);
+      setBookCandidates(results);
+      if (results.length === 0) setImportError('검색된 책이 없어요.');
+    } catch (error) {
+      console.error('Google Books 검색 실패:', error);
+      setImportError('책 정보를 불러오지 못했어요.');
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const useManualEntry = () => {
+    setBookCandidates([]);
+    setImportError(null);
+    setSelectedBookInfo(undefined);
+    setCoverSource('local');
+    setBookSearchAttempted(false);
+  };
+
+  const pickImageAndImport = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
+    if (result.canceled || !result.assets[0]) return;
+
+    const uri = result.assets[0].uri;
+    setCoverLocalUri(uri);
+    if (!selectedBookInfo?.coverUrl) setCoverSource('local');
+    setImportLoading(true);
+    setImportError(null);
+    setBookCandidates([]);
+    setBookSearchAttempted(false);
+    try {
+      const candidates = await bookOcrService.extractTitleCandidates(uri);
+      setOcrCandidates(candidates);
+      const first = candidates[0];
+      if (!first) {
+        setImportError('책 제목 후보를 찾지 못했어요.');
+        return;
+      }
+    } catch (error) {
+      console.error('OCR 실패:', error);
+      setImportError('이미지에서 책 정보를 읽지 못했어요.');
+    } finally {
+      setImportLoading(false);
+    }
+  };
 
   const saveBook = async () => {
     if (!user) {
@@ -189,6 +281,10 @@ export default function AddBookScreen() {
       totalPages: total,
       currentPage: progress,
       readingStartedAt: startedAt.toISOString(),
+      coverLocalUri: coverSource === 'local' ? coverLocalUri : undefined,
+      coverUrl: coverSource === 'google' ? selectedBookInfo?.coverUrl : undefined,
+      isbn: selectedBookInfo?.isbn,
+      description: selectedBookInfo?.description,
       ...(readingStatus === 'COMPLETED' && finishedAt ? { readingFinishedAt: finishedAt.toISOString(), rating, oneLineReview: oneLineReview.trim() } : {}),
     };
 
@@ -211,7 +307,7 @@ export default function AddBookScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
-      <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.topBar}>
           <Pressable accessibilityLabel="뒤로 가기" hitSlop={12} onPress={() => router.back()} style={styles.backButton}><Ionicons name="chevron-back" size={23} color="#1A1714" /></Pressable>
           <Text style={styles.screenTitle}>책 추가하기</Text>
@@ -222,18 +318,73 @@ export default function AddBookScreen() {
           <Image source={require('../../../assets/images/rental-symbol.png')} style={styles.symbol} resizeMode="contain" />
 
           {!isEditing ? (
-            <>
-              <Pressable onPress={() => Alert.alert('준비 중이에요', 'ML Kit 한국어 OCR 연결은 다음 단계에서 진행할게요.')} style={({ pressed }) => [styles.ocrButton, { width: Math.min(274, formWidth) }, pressed && styles.pressed]}>
-                <Ionicons name="images-outline" size={22} color="#C0DA3B" /><Text style={styles.ocrText}>이미지로 한 번에 불러오기</Text>
+            <Pressable disabled={importLoading} onPress={() => void pickImageAndImport()} style={({ pressed }) => [styles.coverPicker, { width: formWidth }, (pressed || importLoading) && styles.pressed]}>
+              {coverLocalUri ? (
+                <Image source={{ uri: coverLocalUri }} style={styles.coverPreview} resizeMode="cover" />
+              ) : (
+                <>
+                  <Ionicons name="images-outline" size={34} color="#5D442D" />
+                  <Text style={styles.coverPickerText}>사진 선택</Text>
+                  <Text style={styles.coverPickerPending}>OCR 후보를 뽑고 표지로도 사용할게요</Text>
+                </>
+              )}
               </Pressable>
-              <Pressable onPress={() => Alert.alert('표지 등록 준비 중', 'Firebase Storage를 활성화하면 표지 사진을 등록할 수 있어요.')} style={({ pressed }) => [styles.coverPicker, { width: formWidth }, pressed && styles.pressed]}>
-                <Ionicons name="camera-outline" size={34} color="#5D442D" /><Text style={styles.coverPickerText}>표지 사진 선택</Text><Text style={styles.coverPickerPending}>Storage 연결 후 사용할 수 있어요</Text>
-              </Pressable>
-            </>
           ) : null}
 
           <View style={{ width: formWidth }}>
+            {importLoading ? <ActivityIndicator color="#A0B243" style={styles.importStatus} /> : null}
+            {importError ? <Text style={styles.importError}>{importError}</Text> : null}
+            {ocrCandidates.length > 0 ? (
+              <View style={styles.candidateSection}>
+                <Text style={styles.candidateTitle}>OCR 제목 후보</Text>
+                {ocrCandidates.map((candidate) => (
+                  <Pressable key={candidate} onPress={() => setTitle(candidate)} style={styles.ocrCandidate}>
+                    <Text style={styles.ocrCandidateText}>{candidate}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
             <TextField label="책 제목" value={title} onChangeText={setTitle} placeholder="제목을 입력하세요." />
+            <Pressable disabled={importLoading} onPress={() => void searchGoogleBooks()} style={({ pressed }) => [styles.loadInfoButton, (pressed || importLoading) && styles.pressed]}>
+              <Text style={styles.loadInfoText}>제목으로 정보 불러오기</Text>
+            </Pressable>
+            {bookSearchAttempted && !importLoading && bookCandidates.length === 0 ? (
+              <Pressable onPress={useManualEntry} style={styles.manualEntryButton}>
+                <Text style={styles.manualEntryText}>응답이 없어요. 그냥 직접 입력할게요</Text>
+              </Pressable>
+            ) : null}
+            {bookCandidates.length > 0 ? (
+              <View style={styles.candidateSection}>
+                <Text style={styles.candidateTitle}>책 후보</Text>
+                {bookCandidates.map((candidate) => (
+                  <Pressable key={`${candidate.title}-${candidate.isbn ?? candidate.author}`} onPress={() => applyBookCandidate(candidate)} style={styles.bookCandidate}>
+                    {candidate.coverUrl ? <Image source={{ uri: candidate.coverUrl }} style={styles.candidateCover} /> : <View style={styles.candidateCoverFallback}><Ionicons name="book-outline" size={18} color="#7A8B26" /></View>}
+                    <View style={styles.candidateCopy}>
+                      <Text numberOfLines={1} style={styles.candidateBookTitle}>{candidate.title}</Text>
+                      <Text numberOfLines={1} style={styles.candidateMeta}>{candidate.author || '저자 미상'} {candidate.publisher ? `· ${candidate.publisher}` : ''}</Text>
+                    </View>
+                  </Pressable>
+                ))}
+                <Pressable onPress={useManualEntry} style={styles.manualEntryButton}>
+                  <Text style={styles.manualEntryText}>원하는 책이 없어요. 직접 입력할게요</Text>
+                </Pressable>
+              </View>
+            ) : null}
+            {selectedBookInfo?.coverUrl && coverLocalUri ? (
+              <View style={styles.coverChoice}>
+                <Text style={styles.candidateTitle}>저장할 표지</Text>
+                <View style={styles.coverChoiceRow}>
+                  <Pressable onPress={() => setCoverSource('google')} style={[styles.coverChoiceOption, coverSource === 'google' && styles.coverChoiceActive]}>
+                    <Image source={{ uri: selectedBookInfo.coverUrl }} style={styles.coverChoiceImage} />
+                    <Text style={styles.coverChoiceText}>Google Books</Text>
+                  </Pressable>
+                  <Pressable onPress={() => setCoverSource('local')} style={[styles.coverChoiceOption, coverSource === 'local' && styles.coverChoiceActive]}>
+                    <Image source={{ uri: coverLocalUri }} style={styles.coverChoiceImage} />
+                    <Text style={styles.coverChoiceText}>내 사진</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
             <TextField label="작가" value={author} onChangeText={setAuthor} placeholder="작가를 입력하세요." />
             <TextField label="출판사" value={publisher} onChangeText={setPublisher} placeholder="출판사를 입력하세요." />
             <DateField label="출간일" value={publishedDate} onPress={() => setCalendarTarget('published')} />
@@ -300,6 +451,30 @@ const styles = StyleSheet.create({
   ocrText: { color: '#B8CF46', fontSize: 14, fontWeight: '800' },
   coverPicker: { height: 171, marginTop: 28, borderWidth: 1, borderStyle: 'dashed', borderColor: '#A2B155', borderRadius: 16, backgroundColor: '#FFFCF5', alignItems: 'center', justifyContent: 'center', gap: 8, overflow: 'hidden', shadowColor: '#5D442D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 2 },
   coverPickerText: { color: '#5D442D', fontSize: 14, fontWeight: '800' }, coverPickerPending: { color: '#85818A', fontSize: 11 },
+  coverPreview: { width: 92, height: 132, alignSelf: 'center', marginTop: 12, borderRadius: 8, backgroundColor: '#F4F0E8' },
+  loadInfoButton: { minHeight: 40, marginTop: 12, borderWidth: 1.5, borderColor: '#A2B155', borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, backgroundColor: '#FFFFFF' },
+  coverMiniButton: { minHeight: 38, marginTop: 8, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, backgroundColor: '#F7F5EB' },
+  loadInfoText: { color: '#6E7A30', fontSize: 13, fontWeight: '800' },
+  importStatus: { marginTop: 12 },
+  importError: { marginTop: 10, color: '#B64E43', fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  candidateSection: { marginTop: 14, gap: 8 },
+  candidateTitle: { color: '#151310', fontSize: 13, fontWeight: '900' },
+  ocrCandidate: { minHeight: 34, borderRadius: 10, justifyContent: 'center', paddingHorizontal: 12, backgroundColor: '#F1F5DC' },
+  ocrCandidateText: { color: '#4F5630', fontSize: 13, fontWeight: '800' },
+  bookCandidate: { minHeight: 72, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: '#E5E2DC', borderRadius: 12, padding: 10, backgroundColor: '#FFF' },
+  manualEntryButton: { minHeight: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, backgroundColor: '#F7F5EB' },
+  manualEntryText: { color: '#5D442D', fontSize: 12, fontWeight: '800' },
+  coverChoice: { marginTop: 14, gap: 8 },
+  coverChoiceRow: { flexDirection: 'row', gap: 10 },
+  coverChoiceOption: { flex: 1, minHeight: 104, borderWidth: 1, borderColor: '#E5E2DC', borderRadius: 12, alignItems: 'center', justifyContent: 'center', gap: 7, backgroundColor: '#FFF' },
+  coverChoiceActive: { borderColor: '#A2B155', backgroundColor: '#F7FAE8' },
+  coverChoiceImage: { width: 42, height: 58, borderRadius: 5, backgroundColor: '#F4F0E8' },
+  coverChoiceText: { color: '#4F5630', fontSize: 12, fontWeight: '800' },
+  candidateCover: { width: 36, height: 52, borderRadius: 5, backgroundColor: '#F4F0E8' },
+  candidateCoverFallback: { width: 36, height: 52, borderRadius: 5, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F4F0E8' },
+  candidateCopy: { flex: 1, minWidth: 0 },
+  candidateBookTitle: { color: '#222', fontSize: 13, fontWeight: '900' },
+  candidateMeta: { marginTop: 4, color: '#777', fontSize: 11 },
   field: { marginTop: 18 }, fieldLabel: { color: '#151310', fontSize: 15, lineHeight: 26, fontWeight: '800', marginBottom: 7 },
   input: { width: '100%', height: 42, borderWidth: 1, borderColor: 'rgba(0,0,0,0.5)', borderRadius: 7, paddingHorizontal: 9, paddingVertical: 0, color: '#312A25', fontSize: 14 },
   dateInput: { width: '100%', height: 42, borderWidth: 1, borderColor: 'rgba(0,0,0,0.5)', borderRadius: 7, paddingHorizontal: 9, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

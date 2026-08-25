@@ -1,5 +1,6 @@
 import { Book } from '@/models/Book';
 import { ReadingStatus } from '@/models/ReadingRecord';
+import { bookCoverRepository } from '@/services/bookCoverRepository';
 import { bookRepository } from '@/services/bookRepository';
 import { readingRecordRepository } from '@/services/readingRecordRepository';
 
@@ -10,6 +11,9 @@ export type CreateOwnedBookInput = {
   publisher: string;
   publishedDate: string;
   coverLocalUri?: string;
+  coverUrl?: string;
+  isbn?: string;
+  description?: string;
   readingStatus: ReadingStatus;
   totalPages: number;
   currentPage: number;
@@ -20,16 +24,19 @@ export type CreateOwnedBookInput = {
 };
 
 export async function createOwnedBook(input: CreateOwnedBookInput): Promise<Book> {
-  // Firestore is the source of truth for owned books. A device-local image URI
-  // cannot be opened by another device, so it must not be persisted as coverUrl.
-  // When Firebase Storage is activated, cover upload can be reintroduced here
-  // without changing the screen or book repository contract.
+  const cover = !input.coverUrl && input.coverLocalUri
+    ? await bookCoverRepository.upload(input.ownerId, input.coverLocalUri)
+    : undefined;
   const book = await bookRepository.createBook(input.ownerId, {
     title: input.title,
     author: input.author,
     publisher: input.publisher,
     publishedDate: input.publishedDate,
     totalPages: input.totalPages,
+    coverUrl: input.coverUrl ?? cover?.url,
+    coverStoragePath: cover?.storagePath,
+    isbn: input.isbn,
+    description: input.description,
     isLendable: false,
   });
   try {
@@ -53,12 +60,19 @@ export async function createOwnedBook(input: CreateOwnedBookInput): Promise<Book
 }
 
 export async function updateOwnedBook(input: CreateOwnedBookInput & { bookId: string }): Promise<void> {
+  const cover = !input.coverUrl && input.coverLocalUri
+    ? await bookCoverRepository.upload(input.ownerId, input.coverLocalUri)
+    : undefined;
   await bookRepository.updateBook(input.bookId, input.ownerId, {
     title: input.title,
     author: input.author,
     publisher: input.publisher,
     publishedDate: input.publishedDate,
     totalPages: input.totalPages,
+    ...(input.coverUrl ? { coverUrl: input.coverUrl, coverStoragePath: '' } : {}),
+    ...(!input.coverUrl && cover ? { coverUrl: cover.url, coverStoragePath: cover.storagePath } : {}),
+    isbn: input.isbn,
+    description: input.description,
   });
   await readingRecordRepository.save({
     bookId: input.bookId,

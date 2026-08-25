@@ -4,5 +4,6 @@ export type AiChatMessage = {
   id: string;
   role: AiChatRole;
   text: string;
+  createdAt?: string;
 };
 

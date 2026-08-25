@@ -104,7 +104,7 @@ export default function ExploreMagazineScreen() {
             </View>
           )}
         </ScrollView>
-        <MagazineAiButton title="서로서가 매거진" description="책과 독서에 대한 매거진을 탐색하고 있어요." />
+        <MagazineAiButton magazineId="explore-home" title="서로서가 매거진" description="책과 독서에 대한 매거진을 탐색하고 있어요." />
       </View>
     </SafeAreaView>
   );

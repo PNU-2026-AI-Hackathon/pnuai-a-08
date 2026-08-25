@@ -17,6 +17,7 @@ export function useChatThread(roomId: string, userId: string) {
     setError(null);
 
     void rentalRepository.syncDueLoans(userId)
+      .then(() => chatRepository.markRoomRead(roomId, userId))
       .then(() => chatRepository.getRoom(roomId, userId))
       .then((nextRoom) => {
         if (!nextRoom) throw new Error('CHAT_ROOM_NOT_FOUND');

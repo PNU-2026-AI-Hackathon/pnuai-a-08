@@ -25,8 +25,38 @@ class FirebaseBookCoverRepository implements BookCoverRepository {
     const storagePath = `book-covers/${ownerId}/${fileName}`;
     const reference = ref(storage, storagePath);
 
-    await uploadBytes(reference, blob, { contentType });
-    return { storagePath, url: await getDownloadURL(reference) };
+    try {
+      console.log('Book cover upload start:', {
+        localUri,
+        storagePath,
+        contentType,
+        size: blob.size,
+      });
+      await uploadBytes(reference, blob, {
+        contentType,
+        customMetadata: { ownerId },
+      });
+      return { storagePath, url: await getDownloadURL(reference) };
+    } catch (error) {
+      const firebaseError = error as {
+        code?: string;
+        message?: string;
+        customData?: { serverResponse?: string };
+        serverResponse?: string;
+      };
+      console.error('Book cover upload failed:', {
+        code: firebaseError.code,
+        message: firebaseError.message,
+        serverResponse: firebaseError.customData?.serverResponse ?? firebaseError.serverResponse,
+        localUri,
+        storagePath,
+        contentType,
+        size: blob.size,
+      });
+      throw error;
+    } finally {
+      (blob as Blob & { close?: () => void }).close?.();
+    }
   }
 
   async delete(storagePath: string): Promise<void> {

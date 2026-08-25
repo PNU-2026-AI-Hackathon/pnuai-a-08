@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,12 +15,16 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import Markdown from 'react-native-markdown-display';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { useAuth } from '@/auth/AuthProvider';
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { useBookDetail } from '@/hooks/useBookDetail';
 import { AiChatMessage } from '@/models/AiChatMessage';
+import { AiConversation } from '@/models/AiConversation';
 import { Book } from '@/models/Book';
+import { aiConversationRepository } from '@/services/aiConversationRepository';
 import { askGeminiAboutBook } from '@/services/geminiService';
 
 function getFriendlyError(error: unknown) {
@@ -41,18 +45,30 @@ function getFriendlyError(error: unknown) {
   return 'AI 답변을 가져오지 못했어요. 잠시 후 다시 시도해주세요.';
 }
 
+function normalizeAssistantMarkdown(text: string) {
+  return text
+    .replace(/\\\*/g, '*')
+    .replace(/\*\*/g, '');
+}
+
 export default function AiBookChatScreen() {
-  const { bookId, contextTitle, contextDescription } = useLocalSearchParams<{
+  const { bookId, magazineId, contextTitle, contextDescription, conversationId } = useLocalSearchParams<{
     bookId?: string;
+    magazineId?: string;
     contextTitle?: string;
     contextDescription?: string;
+    conversationId?: string;
   }>();
   const { width } = useWindowDimensions();
+  const { user } = useAuth();
   const bookDetail = useBookDetail(bookId ?? '');
+  const [conversation, setConversation] = useState<AiConversation | null>(null);
+  const [activeConversationId, setActiveConversationId] = useState<string | undefined>(conversationId);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(Boolean(conversationId));
   const magazineContext = useMemo<Book | null>(() => {
     if (!contextTitle) return null;
     return {
-      id: `magazine-${contextTitle}`,
+      id: `magazine-${magazineId ?? contextTitle}`,
       title: contextTitle,
       author: '서로서가 편집부',
       description: contextDescription,
@@ -60,10 +76,22 @@ export default function AiBookChatScreen() {
       accent: '#34271F',
       motif: 'lines',
     };
-  }, [contextDescription, contextTitle]);
-  const book = bookDetail.book ?? magazineContext;
-  const isLoading = Boolean(bookId) && bookDetail.isLoading;
-  const error = bookId ? bookDetail.error : null;
+  }, [contextDescription, contextTitle, magazineId]);
+  const conversationContext = useMemo<Book | null>(() => {
+    if (!conversation) return null;
+    return {
+      id: conversation.sourceId,
+      title: conversation.sourceTitle,
+      author: conversation.sourceType === 'magazine' ? '서로서가 편집부' : '',
+      description: conversation.sourceDescription,
+      colors: ['#D8FF45', '#F7F6E9'],
+      accent: '#34271F',
+      motif: 'lines',
+    };
+  }, [conversation]);
+  const book = conversationContext ?? bookDetail.book ?? magazineContext;
+  const isLoading = isHistoryLoading || (Boolean(bookId) && !conversationId && bookDetail.isLoading);
+  const error = !conversationId && bookId ? bookDetail.error : null;
   const [messages, setMessages] = useState<AiChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isSending, setIsSending] = useState(false);
@@ -80,6 +108,76 @@ export default function AiBookChatScreen() {
     ];
   }, [book]);
 
+  useEffect(() => {
+    let active = true;
+
+    const loadConversation = async () => {
+      if (!conversationId) {
+        setConversation(null);
+        setActiveConversationId(undefined);
+        setIsHistoryLoading(false);
+        return;
+      }
+      if (!user) {
+        setIsHistoryLoading(false);
+        return;
+      }
+
+      setIsHistoryLoading(true);
+      try {
+        const [nextConversation, nextMessages] = await Promise.all([
+          aiConversationRepository.get(conversationId, user.uid),
+          aiConversationRepository.listMessages(conversationId, user.uid),
+        ]);
+        if (!active) return;
+        setConversation(nextConversation);
+        setMessages(nextMessages);
+        setActiveConversationId(nextConversation?.id ?? conversationId);
+        requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated: false }));
+      } catch (loadError) {
+        console.error('AI 대화 기록 조회 실패:', loadError);
+        if (active) Alert.alert('AI 대화 기록을 불러오지 못했어요', '잠시 후 다시 시도해주세요.');
+      } finally {
+        if (active) setIsHistoryLoading(false);
+      }
+    };
+
+    void loadConversation();
+    return () => {
+      active = false;
+    };
+  }, [conversationId, user]);
+
+  const ensureConversation = async () => {
+    if (activeConversationId) return activeConversationId;
+    if (!user || !book) return undefined;
+
+    const sourceType = bookId ? 'book' : 'magazine';
+    const sourceId = sourceType === 'book' ? book.id : magazineId ?? book.id;
+    const sourceTitle = book.title.replaceAll('\n', ' ');
+    const nextConversationId = await aiConversationRepository.create({
+      userId: user.uid,
+      sourceType,
+      sourceId,
+      sourceTitle,
+      sourceDescription: book.description,
+    });
+
+    const now = new Date().toISOString();
+    setActiveConversationId(nextConversationId);
+    setConversation({
+      id: nextConversationId,
+      userId: user.uid,
+      sourceType,
+      sourceId,
+      sourceTitle,
+      sourceDescription: book.description,
+      createdAt: now,
+      updatedAt: now,
+    });
+    return nextConversationId;
+  };
+
   const sendMessage = async (rawMessage: string) => {
     const message = rawMessage.trim();
     if (!book || !message || isSending) return;
@@ -95,6 +193,15 @@ export default function AiBookChatScreen() {
     setIsSending(true);
 
     try {
+      const nextConversationId = await ensureConversation();
+      if (nextConversationId) {
+        await aiConversationRepository.appendMessage({
+          conversationId: nextConversationId,
+          role: 'user',
+          text: message,
+        });
+      }
+
       const result = await askGeminiAboutBook({
         book,
         message,
@@ -113,6 +220,13 @@ export default function AiBookChatScreen() {
           text: result.text,
         },
       ]);
+      if (nextConversationId) {
+        await aiConversationRepository.appendMessage({
+          conversationId: nextConversationId,
+          role: 'assistant',
+          text: result.text,
+        });
+      }
     } catch (sendError) {
       Alert.alert('답변을 불러오지 못했어요', getFriendlyError(sendError));
     } finally {
@@ -125,7 +239,7 @@ export default function AiBookChatScreen() {
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <KeyboardAvoidingView
         style={[styles.page, { width: pageWidth }]}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.topBar}>
           <Pressable
@@ -208,7 +322,11 @@ export default function AiBookChatScreen() {
                     {item.role === 'assistant' ? (
                       <Text style={styles.aiLabel}>서로 AI</Text>
                     ) : null}
-                    <Text style={styles.messageText}>{item.text}</Text>
+                    {item.role === 'assistant' ? (
+                      <Markdown style={markdownStyles}>{normalizeAssistantMarkdown(item.text)}</Markdown>
+                    ) : (
+                      <Text style={styles.messageText}>{item.text}</Text>
+                    )}
                   </View>
                 )}
                 ItemSeparatorComponent={() => <View style={styles.messageGap} />}
@@ -373,4 +491,72 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
   },
   statusText: { color: colors.textMuted, fontSize: typography.body, textAlign: 'center' },
+});
+
+const markdownStyles = StyleSheet.create({
+  body: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  paragraph: {
+    marginTop: 0,
+    marginBottom: 8,
+  },
+  text: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  strong: {
+    fontWeight: '800',
+  },
+  heading1: {
+    color: colors.text,
+    fontSize: 16,
+    lineHeight: 23,
+    fontWeight: '900',
+    marginTop: 0,
+    marginBottom: 8,
+  },
+  heading2: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '900',
+    marginTop: 0,
+    marginBottom: 8,
+  },
+  heading3: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 21,
+    fontWeight: '900',
+    marginTop: 0,
+    marginBottom: 6,
+  },
+  bullet_list: {
+    marginTop: 0,
+    marginBottom: 8,
+  },
+  ordered_list: {
+    marginTop: 0,
+    marginBottom: 8,
+  },
+  list_item: {
+    marginBottom: 4,
+  },
+  code_inline: {
+    color: colors.text,
+    backgroundColor: colors.background,
+    borderRadius: 4,
+    paddingHorizontal: 4,
+  },
+  fence: {
+    color: colors.text,
+    backgroundColor: colors.background,
+    borderRadius: 8,
+    padding: 8,
+    marginVertical: 6,
+  },
 });

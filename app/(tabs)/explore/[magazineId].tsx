@@ -123,7 +123,7 @@ function ReadingOrderArticle({ magazine }: { magazine: Magazine }) {
 
         <Pressable
           accessibilityRole="button"
-          onPress={() => router.push({ pathname: '/(tabs)/home/ai', params: { contextTitle: magazine.title.replaceAll('\n', ' '), contextDescription: magazine.description } })}
+          onPress={() => router.push({ pathname: '/(tabs)/home/ai', params: { magazineId: magazine.id, contextTitle: magazine.title.replaceAll('\n', ' '), contextDescription: magazine.description } })}
           style={({ pressed }) => [styles.readAgain, pressed && { opacity: 0.8 }]}
         >
           <Text style={styles.readAgainText}>이 주제로 다시 읽기</Text>
@@ -156,7 +156,7 @@ export default function MagazineDetailScreen() {
         {magazine.detailStyle === 'reading-order'
           ? <ReadingOrderArticle magazine={magazine} />
           : <EditorialArticle magazine={magazine} />}
-        <MagazineAiButton title={magazine.title} description={magazine.description} />
+        <MagazineAiButton magazineId={magazine.id} title={magazine.title} description={magazine.description} />
       </View>
     </SafeAreaView>
   );

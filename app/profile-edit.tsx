@@ -35,7 +35,7 @@ export default function ProfileEditScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'bottom']}>
-      <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.header}>
           <Pressable onPress={() => router.back()} style={styles.back}><Ionicons name="chevron-back" size={23} color="#111" /></Pressable>
           <Text style={styles.title}>개인정보 수정</Text><View style={styles.back} />
