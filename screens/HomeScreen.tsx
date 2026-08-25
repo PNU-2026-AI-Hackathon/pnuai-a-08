@@ -49,6 +49,10 @@ export default function HomeScreen() {
     router.push('/add-book');
   };
 
+  const openBorrowBooks = () => {
+    router.push('/(tabs)/rental/borrow');
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top']}>
       <View style={[styles.page, { width: pageWidth }]}>
@@ -82,7 +86,12 @@ export default function HomeScreen() {
               <View style={styles.section}>
                 <SectionHeader title="빌린 책" count={borrowed.length} onPress={() => router.push('/home/borrowed')} />
                 <View style={styles.shelfShift}>
-                  <BookShelf books={borrowed} variant="borrowed" onPressBook={openBook} />
+                  <BookShelf
+                    books={borrowed}
+                    variant="borrowed"
+                    onPressBook={openBook}
+                    onPressAdd={openBorrowBooks}
+                  />
                 </View>
               </View>
 

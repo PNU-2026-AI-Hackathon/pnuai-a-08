@@ -73,7 +73,7 @@ export default function TabLayout() {
       <Tabs.Screen name="explore" options={{ title: '탐색' }} />
       <Tabs.Screen name="rental" options={{ title: '대여' }} />
       <Tabs.Screen name="home" options={{ title: '홈' }} />
-      <Tabs.Screen name="community" options={{ title: '커뮤니티' }} />
+      <Tabs.Screen name="community" options={{ title: '채팅' }} />
       <Tabs.Screen name="mypage" options={{ title: '마이페이지' }} />
     </Tabs>
   );

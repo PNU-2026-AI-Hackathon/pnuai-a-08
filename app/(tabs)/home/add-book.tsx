@@ -10,7 +10,7 @@ import { useBookDetail } from '@/hooks/useBookDetail';
 import { useReadingRecord } from '@/hooks/useReadingRecord';
 import { ReadingStatus } from '@/models/ReadingRecord';
 import { bookOcrService } from '@/services/bookOcrService';
-import { createOwnedBook, updateOwnedBook } from '@/services/bookCreationService';
+import { createOwnedBook, saveBookReadingRecord, updateOwnedBook } from '@/services/bookCreationService';
 import { GoogleBookCandidate, googleBooksRepository } from '@/services/googleBooksRepository';
 
 type CalendarTarget = 'published' | 'started' | 'finished';
@@ -70,14 +70,17 @@ function CalendarPicker({ selected, onSelect }: { selected: Date | null; onSelec
   );
 }
 
-function TextField({ label, value, placeholder, onChangeText, numeric = false, maxLength = 120 }: {
+function TextField({ label, value, placeholder, onChangeText, numeric = false, multiline = false, editable = true, maxLength = 120 }: {
   label: string;
   value: string;
   placeholder: string;
   onChangeText: (value: string) => void;
   numeric?: boolean;
+  multiline?: boolean;
+  editable?: boolean;
   maxLength?: number;
 }) {
+  const [contentHeight, setContentHeight] = useState(88);
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -87,18 +90,28 @@ function TextField({ label, value, placeholder, onChangeText, numeric = false, m
         placeholder={placeholder}
         placeholderTextColor="#85818A"
         keyboardType={numeric ? 'number-pad' : 'default'}
-        style={styles.input}
+        editable={editable}
+        multiline={multiline}
+        scrollEnabled={!multiline}
+        textAlignVertical={multiline ? 'top' : 'center'}
+        onContentSizeChange={multiline ? (event) => setContentHeight(Math.max(88, event.nativeEvent.contentSize.height + 20)) : undefined}
+        style={[
+          styles.input,
+          multiline && styles.multilineInput,
+          multiline && { height: contentHeight },
+          !editable && styles.inputDisabled,
+        ]}
         maxLength={maxLength}
       />
     </View>
   );
 }
 
-function DateField({ label, value, onPress }: { label: string; value: Date | null; onPress: () => void }) {
+function DateField({ label, value, onPress, disabled = false }: { label: string; value: Date | null; onPress: () => void; disabled?: boolean }) {
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
-      <Pressable accessibilityRole="button" onPress={onPress} style={styles.dateInput}>
+      <Pressable accessibilityRole="button" disabled={disabled} onPress={onPress} style={[styles.dateInput, disabled && styles.inputDisabled]}>
         <Text style={[styles.dateInputText, !value && styles.placeholder]}>{value ? formatDate(value) : '날짜를 선택해주세요'}</Text>
         <Ionicons name="calendar-outline" size={19} color="#6E7A30" />
       </Pressable>
@@ -138,6 +151,7 @@ export default function AddBookScreen() {
   const [imageSourceOpen, setImageSourceOpen] = useState(false);
   const formWidth = Math.min(329, width - 48);
   const isEditing = Boolean(bookId);
+  const isBorrowedBook = Boolean(isEditing && detail.book && user && detail.book.ownerId !== user.uid);
 
   useEffect(() => {
     const book = detail.book;
@@ -149,7 +163,7 @@ export default function AddBookScreen() {
     setPublisher(book.publisher ?? '');
     setPublishedDate(parseDate(book.publishedDate));
     setReadingStatus(record?.status ?? 'READING');
-    setTotalPages(book.totalPages ? String(book.totalPages) : '');
+    setTotalPages(record?.totalPages ? String(record.totalPages) : book.totalPages ? String(book.totalPages) : '');
     setCurrentPage(record ? String(record.currentPage) : '');
     setStartedAt(parseDate(record?.startedAt) ?? new Date());
     setFinishedAt(parseDate(record?.finishedAt));
@@ -280,7 +294,7 @@ export default function AddBookScreen() {
       Alert.alert('로그인이 필요해요', '나의 책을 저장하려면 부산대학교 계정으로 로그인해주세요.');
       return;
     }
-    if (!title.trim() || !author.trim() || !publisher.trim() || !publishedDate) {
+    if (!isBorrowedBook && (!title.trim() || !author.trim() || !publisher.trim() || !publishedDate)) {
       Alert.alert('입력을 확인해주세요', '책 제목, 작가, 출판사, 출간일을 모두 입력해주세요.');
       return;
     }
@@ -307,27 +321,40 @@ export default function AddBookScreen() {
       return;
     }
 
-    const input = {
-      ownerId: user.uid,
-      title: title.trim(),
-      author: author.trim(),
-      publisher: publisher.trim(),
-      publishedDate: publishedDate.toISOString(),
-      readingStatus,
-      totalPages: total,
-      currentPage: progress,
-      readingStartedAt: startedAt.toISOString(),
-      coverLocalUri: coverSource === 'local' ? coverLocalUri : undefined,
-      coverUrl: coverSource === 'google' ? selectedBookInfo?.coverUrl : undefined,
-      isbn: selectedBookInfo?.isbn,
-      description: selectedBookInfo?.description,
-      ...(readingStatus === 'COMPLETED' && finishedAt ? { readingFinishedAt: finishedAt.toISOString(), rating, oneLineReview: oneLineReview.trim() } : {}),
-    };
-
     setSaving(true);
     try {
-      if (bookId) await updateOwnedBook({ ...input, bookId });
-      else await createOwnedBook(input);
+      if (bookId && isBorrowedBook) {
+        await saveBookReadingRecord({
+          bookId,
+          userId: user.uid,
+          readingStatus,
+          totalPages: total,
+          currentPage: progress,
+          readingStartedAt: startedAt.toISOString(),
+          oneLineReview: oneLineReview.trim(),
+          ...(readingStatus === 'COMPLETED' && finishedAt ? { readingFinishedAt: finishedAt.toISOString(), rating } : {}),
+        });
+      } else {
+        const input = {
+          ownerId: user.uid,
+          title: title.trim(),
+          author: author.trim(),
+          publisher: publisher.trim(),
+          publishedDate: publishedDate!.toISOString(),
+          readingStatus,
+          totalPages: total,
+          currentPage: progress,
+          readingStartedAt: startedAt.toISOString(),
+          coverLocalUri: coverSource === 'local' ? coverLocalUri : undefined,
+          coverUrl: coverSource === 'google' ? selectedBookInfo?.coverUrl : undefined,
+          isbn: selectedBookInfo?.isbn,
+          description: selectedBookInfo?.description,
+          oneLineReview: oneLineReview.trim(),
+          ...(readingStatus === 'COMPLETED' && finishedAt ? { readingFinishedAt: finishedAt.toISOString(), rating } : {}),
+        };
+        if (bookId) await updateOwnedBook({ ...input, bookId });
+        else await createOwnedBook(input);
+      }
       router.back();
     } catch (error) {
       console.error('책 기록 저장 실패:', error);
@@ -346,7 +373,7 @@ export default function AddBookScreen() {
       <KeyboardAvoidingView style={styles.page} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <View style={styles.topBar}>
           <Pressable accessibilityLabel="뒤로 가기" hitSlop={12} onPress={() => router.back()} style={styles.backButton}><Ionicons name="chevron-back" size={23} color="#1A1714" /></Pressable>
-          <Text style={styles.screenTitle}>책 추가하기</Text>
+          <Text style={styles.screenTitle}>{isEditing ? '독서 기록' : '책 추가하기'}</Text>
           <View style={styles.backButton} />
         </View>
 
@@ -380,10 +407,10 @@ export default function AddBookScreen() {
                 ))}
               </View>
             ) : null}
-            <TextField label="책 제목" value={title} onChangeText={setTitle} placeholder="제목을 입력하세요." />
-            <Pressable disabled={importLoading} onPress={() => void searchGoogleBooks()} style={({ pressed }) => [styles.loadInfoButton, (pressed || importLoading) && styles.pressed]}>
+            <TextField label="책 제목" value={title} onChangeText={setTitle} placeholder="제목을 입력하세요." editable={!isBorrowedBook} />
+            {!isBorrowedBook ? <Pressable disabled={importLoading} onPress={() => void searchGoogleBooks()} style={({ pressed }) => [styles.loadInfoButton, (pressed || importLoading) && styles.pressed]}>
               <Text style={styles.loadInfoText}>제목으로 정보 불러오기</Text>
-            </Pressable>
+            </Pressable> : null}
             {bookSearchAttempted && !importLoading && bookCandidates.length === 0 ? (
               <Pressable onPress={useManualEntry} style={styles.manualEntryButton}>
                 <Text style={styles.manualEntryText}>응답이 없어요. 그냥 직접 입력할게요</Text>
@@ -421,10 +448,10 @@ export default function AddBookScreen() {
                 </View>
               </View>
             ) : null}
-            <TextField label="작가" value={author} onChangeText={setAuthor} placeholder="작가를 입력하세요." />
-            <TextField label="출판사" value={publisher} onChangeText={setPublisher} placeholder="출판사를 입력하세요." />
-            <DateField label="출간일" value={publishedDate} onPress={() => setCalendarTarget('published')} />
-            {calendarFor('published')}
+            <TextField label="작가" value={author} onChangeText={setAuthor} placeholder="작가를 입력하세요." editable={!isBorrowedBook} />
+            <TextField label="출판사" value={publisher} onChangeText={setPublisher} placeholder="출판사를 입력하세요." editable={!isBorrowedBook} />
+            <DateField label="출간일" value={publishedDate} disabled={isBorrowedBook} onPress={() => setCalendarTarget('published')} />
+            {!isBorrowedBook ? calendarFor('published') : null}
 
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>독서 상태</Text>
@@ -464,9 +491,9 @@ export default function AddBookScreen() {
                     ))}
                   </View>
                 </View>
-                <TextField label="한줄평" value={oneLineReview} onChangeText={setOneLineReview} placeholder="짧은 감상평을 남겨보세요." maxLength={100} />
               </>
             ) : null}
+            <TextField label="독서 기록" value={oneLineReview} onChangeText={setOneLineReview} placeholder="감상평을 남겨보세요." multiline maxLength={500} />
 
             <Pressable disabled={saving} onPress={() => void saveBook()} style={({ pressed }) => [styles.saveButton, (pressed || saving) && styles.pressed]}>
               {saving ? <ActivityIndicator color="#FFF" /> : <Text style={styles.saveText}>{isEditing ? '기록 저장하기' : '등록하기'}</Text>}
@@ -548,6 +575,8 @@ const styles = StyleSheet.create({
   candidateMeta: { marginTop: 4, color: '#777', fontSize: 11 },
   field: { marginTop: 18 }, fieldLabel: { color: '#151310', fontSize: 15, lineHeight: 26, fontWeight: '800', marginBottom: 7 },
   input: { width: '100%', height: 42, borderWidth: 1, borderColor: 'rgba(0,0,0,0.5)', borderRadius: 7, paddingHorizontal: 9, paddingVertical: 0, color: '#312A25', fontSize: 14 },
+  multilineInput: { minHeight: 88, paddingTop: 11, paddingBottom: 11, lineHeight: 21 },
+  inputDisabled: { color: '#746E69', borderColor: '#D8D4CC', backgroundColor: '#F5F3EF' },
   dateInput: { width: '100%', height: 42, borderWidth: 1, borderColor: 'rgba(0,0,0,0.5)', borderRadius: 7, paddingHorizontal: 9, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   dateInputText: { color: '#312A25', fontSize: 14 }, placeholder: { color: '#85818A' },
   selectInput: { height: 42, borderWidth: 1, borderColor: '#6E7A30', borderRadius: 7, paddingHorizontal: 9, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

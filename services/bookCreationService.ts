@@ -44,6 +44,7 @@ export async function createOwnedBook(input: CreateOwnedBookInput): Promise<Book
       bookId: book.id,
       userId: input.ownerId,
       status: input.readingStatus,
+      totalPages: input.totalPages,
       currentPage: input.currentPage,
       startedAt: input.readingStartedAt,
       finishedAt: input.readingFinishedAt,
@@ -78,6 +79,31 @@ export async function updateOwnedBook(input: CreateOwnedBookInput & { bookId: st
     bookId: input.bookId,
     userId: input.ownerId,
     status: input.readingStatus,
+    totalPages: input.totalPages,
+    currentPage: input.currentPage,
+    startedAt: input.readingStartedAt,
+    finishedAt: input.readingFinishedAt,
+    rating: input.rating,
+    oneLineReview: input.oneLineReview,
+  });
+}
+
+export async function saveBookReadingRecord(input: {
+  bookId: string;
+  userId: string;
+  readingStatus: ReadingStatus;
+  totalPages: number;
+  currentPage: number;
+  readingStartedAt: string;
+  readingFinishedAt?: string;
+  rating?: number;
+  oneLineReview?: string;
+}): Promise<void> {
+  await readingRecordRepository.save({
+    bookId: input.bookId,
+    userId: input.userId,
+    status: input.readingStatus,
+    totalPages: input.totalPages,
     currentPage: input.currentPage,
     startedAt: input.readingStartedAt,
     finishedAt: input.readingFinishedAt,

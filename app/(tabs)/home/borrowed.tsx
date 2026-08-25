@@ -43,15 +43,15 @@ function BorrowedBook({ rental, width }: { rental: BorrowedRental; width: number
   const source = rental.book.coverUrl ? { uri: rental.book.coverUrl } : localCover;
 
   const openRental = () => {
-    if (!rental.chatRoomId) return;
-    router.push({ pathname: '/chat/[roomId]', params: { roomId: rental.chatRoomId } });
+    if (!rental.book.id) return;
+    router.push({ pathname: '/home/[bookId]', params: { bookId: rental.book.id } });
   };
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${rental.book.title}, ${scheduled ? '대여 예정' : `대여중 ${formatReturnDday(rental.dueAt)}`}`}
-      disabled={!rental.chatRoomId}
+      disabled={!rental.book.id}
       onPress={openRental}
       style={({ pressed }) => [styles.book, { width, height }, pressed && styles.pressed]}
     >

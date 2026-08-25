@@ -46,8 +46,9 @@ export default function BookDetailScreen() {
   const readingDetail = useReadingRecord(bookId ?? '', user?.uid ?? '');
   const pageWidth = Math.min(width, 620);
   const coverWidth = Math.min(pageWidth * 0.595, 232);
-  const readingProgress = book?.totalPages
-    ? Math.max(0, Math.min(100, Math.round(((readingDetail.record?.currentPage ?? 0) / book.totalPages) * 100)))
+  const recordedTotalPages = readingDetail.record?.totalPages ?? book?.totalPages;
+  const readingProgress = recordedTotalPages
+    ? Math.max(0, Math.min(100, Math.round(((readingDetail.record?.currentPage ?? 0) / recordedTotalPages) * 100)))
     : 0;
   const rentalLabel = book ? getRentalLabel(book.status, book.rentalStartsAt, book.dueDate) : null;
   const readingLabel = readingDetail.record?.status === 'COMPLETED'

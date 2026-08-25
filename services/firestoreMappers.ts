@@ -101,6 +101,7 @@ export function mapReadingRecord(snapshot: DocumentSnapshot<DocumentData>): Read
     bookId: asString(data.bookId),
     userId: asString(data.userId),
     status: data.status === 'COMPLETED' ? 'COMPLETED' : 'READING',
+    totalPages: asFiniteNumber(data.totalPages),
     currentPage: asFiniteNumber(data.currentPage) ?? 0,
     startedAt: toIsoString(data.startedAt) ?? new Date(0).toISOString(),
     finishedAt: toIsoString(data.finishedAt),

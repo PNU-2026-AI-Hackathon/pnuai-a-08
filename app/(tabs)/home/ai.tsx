@@ -310,6 +310,7 @@ export default function AiBookChatScreen() {
             ) : (
               <FlatList
                 ref={listRef}
+                style={styles.messageArea}
                 data={messages}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
@@ -354,6 +355,7 @@ export default function AiBookChatScreen() {
                 multiline
                 maxLength={1000}
                 editable={!isSending}
+                textAlignVertical="top"
                 accessibilityLabel="AI에게 보낼 메시지"
                 style={styles.input}
               />
@@ -431,6 +433,7 @@ const styles = StyleSheet.create({
   },
   suggestionPressed: { backgroundColor: colors.accentSoft, transform: [{ scale: 0.99 }] },
   suggestionText: { color: colors.text, fontSize: 12, fontWeight: '600' },
+  messageArea: { flex: 1, minHeight: 0 },
   messageList: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   messageGap: { height: spacing.md },
   messageBubble: {

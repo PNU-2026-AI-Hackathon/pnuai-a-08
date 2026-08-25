@@ -40,8 +40,9 @@ export function MagazineGridCard({
           <Image source={magazine.cover} style={styles.image} resizeMode="cover" />
           <View style={styles.scrim} />
           <View style={styles.caption}>
-            <Text style={styles.category}>{magazine.category}</Text>
+            <Text style={styles.category}>{magazine.eyebrow}</Text>
             <Text style={styles.title}>{magazine.cardTitle}</Text>
+            <Text style={styles.byline}>{magazine.byline}</Text>
           </View>
         </>
       )}
@@ -60,6 +61,7 @@ const styles = StyleSheet.create({
   caption: { position: 'absolute', left: 12, right: 10, bottom: 13 },
   category: { color: '#F7F4ED', fontSize: 10, fontWeight: '800', marginBottom: 5 },
   title: { color: '#FFFFFF', fontSize: 17, lineHeight: 21, fontWeight: '900', letterSpacing: -0.6 },
+  byline: { color: 'rgba(255,255,255,0.8)', fontSize: 9, lineHeight: 13, fontWeight: '700', marginTop: 7 },
   indexBadge: {
     position: 'absolute', top: 9, left: 9, minWidth: 28, height: 20,
     alignItems: 'center', justifyContent: 'center', backgroundColor: '#D8FF45', paddingHorizontal: 5,

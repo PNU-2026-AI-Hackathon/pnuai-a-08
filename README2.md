@@ -69,7 +69,7 @@ Google 로그인 상태가 복원되면 `.ac.kr` 사용자의 프로필을 `merg
 - `publishedDate`: Firestore Timestamp로 저장하는 출간일
 - `totalPages`: 책 자체의 총 페이지 수인 양의 정수
 
-책 상세의 `기록하기` 또는 `기록보기`는 같은 책 추가/기록 폼을 `bookId`와 함께 열며, 저장 시 책 메타데이터는 `books/{bookId}`, 개인 독서 상태는 `records/{userId}_{bookId}`에 갱신합니다. `AI와 대화하기`는 기존 Gemini 책 챗봇에 해당 `bookId`를 전달합니다.
+책 상세의 `기록하기` 또는 `기록보기`는 같은 책 추가/기록 폼을 `bookId`와 함께 엽니다. 소유한 책은 책 메타데이터를 `books/{bookId}`, 개인 독서 상태를 `records/{userId}_{bookId}`에 갱신합니다. 빌린 책은 원 소유자의 `books` 문서를 수정하지 않고 현재 대여자의 `records/{userId}_{bookId}`만 저장합니다. 홈의 빌린 책과 `빌린 책 > 전체보기` 모두 책 상세로 이동하므로 동일한 기록 화면을 사용합니다. `AI와 대화하기`는 기존 Gemini 책 챗봇에 해당 `bookId`를 전달합니다.
 
 2026-08-23부터 Storage가 활성화되기 전에도 나의 책을 사용할 수 있도록, 앱의 `bookCreationService`가 책 메타데이터를 `bookRepository`를 통해 Firestore에 직접 생성합니다. 표지 없이 생성된 문서는 기존 기본 표지 UI로 표시됩니다. 기기 로컬 이미지 URI는 다른 기기에서 접근할 수 없으므로 Firestore에 저장하지 않습니다.
 
@@ -89,13 +89,14 @@ Storage 활성화 후 표지 이미지는 `book-covers/{uid}/{fileName}`에 저�
 - `recordId`, `bookId`, `userId`
 - `status`: `READING | COMPLETED`
 - `currentPage`: 읽는 중인 마지막 페이지. `0 <= currentPage <= books.totalPages`
+- `totalPages`: 개인 기록에서 사용하는 총 페이지 수. 빌린 책의 메타데이터에 총 페이지 수가 없을 때도 진행률을 계산할 수 있도록 기록 문서에 함께 저장
 - `startedAt`: Firestore Timestamp로 저장하는 독서 시작일
 - `finishedAt`: 완독일 때만 사용하는 Firestore Timestamp
 - `rating`: 완독일 때 사용하는 `1..5` 정수
-- `oneLineReview`: 완독일 때 사용하는 최대 100자의 한줄평
+- `oneLineReview`: 독서 상태와 관계없이 저장 가능한 최대 500자의 독서 기록. 기존 필드명 호환을 위해 Firestore 키는 유지
 - `createdAt`, `updatedAt`
 
-`COMPLETED`로 저장할 때 프론트는 `currentPage = books.totalPages`로 맞춥니다. 다시 `READING`으로 변경하면 `finishedAt`, `rating`, `oneLineReview`를 `null` 또는 빈 문자열로 초기화합니다. 기록 문서가 없는 기존 책은 화면에서 `READING`, 진행률 0%로 호환 처리합니다. 홈의 나의 책 상세 진행률은 `round(records.currentPage / books.totalPages * 100)`으로 계산하고 0~100 범위로 제한합니다.
+`COMPLETED`로 저장할 때 프론트는 `currentPage = totalPages`로 맞춥니다. 다시 `READING`으로 변경하면 `finishedAt`, `rating`은 초기화하지만 독서 기록은 유지합니다. 기록 문서가 없는 기존 책은 화면에서 `READING`, 진행률 0%로 호환 처리합니다. 책 상세 진행률은 `round(records.currentPage / (records.totalPages ?? books.totalPages) * 100)`으로 계산하고 0~100 범위로 제한합니다.
 
 홈의 `나의 책 > 전체보기`는 `books.ownerId == uid`와 `records.userId == uid`를 조합해 나의 기록을 구성합니다. `records.startedAt` 기준 월별로 묶고, 기록이 없는 기존 책은 `books.createdAt`을 기준으로 표시합니다. 읽는 중 진행률은 `round(records.currentPage / books.totalPages * 100)`으로 계산하고 완독은 `records.status == COMPLETED`를 사용합니다. 목데이터는 사용하지 않습니다.
 
@@ -293,3 +294,15 @@ Security Rules에서는 `records.userId == request.auth.uid`인 문서만 생성
 - `hooks/useReadingRecord.ts`: 책 상세와 기록 수정 화면의 포커스 기반 독서 기록 재조회
 
 새 화면에서 Firestore를 사용할 때 컴포넌트에서 `firebase/firestore`를 직접 호출하지 말고 repository에 메서드를 추가합니다. 백엔드 변경이나 새 필드·인덱스·Function이 필요하면 이 문서에 우선순위, 입력, 출력, 권한 조건을 함께 기록합니다.
+
+## 탐색 매거진 콘텐츠 운영 메모
+
+현재 탐색 매거진 19건은 `data/magazines.ts`의 개발자 관리 목데이터입니다. 각 항목은 소개 훅, 본문 섹션, 토론 질문과 양쪽 관점, 북 플레이리스트, 역사·작가·기술 팩트, 편집자 노트, 외부 참고자료 URL을 포함합니다. 『모순』, 『오뒷세이아』, 『클로드 코드 제대로 시작하기』 매거진은 선택적 `longRead`를 사용해 장문 프리뷰, 중간 강조문, 독자 질문을 제공합니다. 탐색에는 `테크` 카테고리가 추가되어 있습니다. 앱은 외부 URL을 참고자료로만 열며 Firestore read/write는 발생하지 않습니다.
+
+운영자가 앱 배포 없이 매거진을 발행해야 하는 단계가 오면 다음 백엔드 구조가 필요합니다.
+
+- `magazines/{magazineId}`: 현재 `models/Magazine.ts`와 동일한 콘텐츠 필드, `status: DRAFT | PUBLISHED`, `publishedAt`, `updatedAt`, `authorUid`
+- 일반 사용자는 `PUBLISHED` 문서만 읽고, 쓰기는 관리자 custom claim 사용자만 허용
+- 이미지와 음악은 저작권이 확인된 외부 링크 또는 Storage asset reference만 저장
+- 외부 참고자료 URL은 서버/관리자 도구에서 `https` scheme과 허용 도메인을 검증
+- 발행 목록은 `status ASC, publishedAt DESC` 복합 인덱스로 조회

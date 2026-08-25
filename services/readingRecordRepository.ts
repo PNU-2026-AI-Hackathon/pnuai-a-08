@@ -8,6 +8,7 @@ export type SaveReadingRecordInput = {
   bookId: string;
   userId: string;
   status: ReadingStatus;
+  totalPages?: number;
   currentPage: number;
   startedAt: string;
   finishedAt?: string;
@@ -45,11 +46,12 @@ export const readingRecordRepository = {
         bookId: input.bookId,
         userId: input.userId,
         status: input.status,
+        totalPages: input.totalPages ?? null,
         currentPage: input.currentPage,
         startedAt: new Date(input.startedAt),
         finishedAt: input.status === 'COMPLETED' && input.finishedAt ? new Date(input.finishedAt) : null,
         rating: input.status === 'COMPLETED' ? input.rating ?? null : null,
-        oneLineReview: input.status === 'COMPLETED' ? input.oneLineReview?.trim() ?? '' : '',
+        oneLineReview: input.oneLineReview?.trim().slice(0, 500) ?? '',
         createdAt: previousCreatedAt ?? serverTimestamp(),
         updatedAt: serverTimestamp(),
       });

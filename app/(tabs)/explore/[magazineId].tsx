@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Image, Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { MagazineAiButton } from '@/components/MagazineAiButton';
@@ -42,6 +42,137 @@ function BookList({ magazine, numbered = false }: { magazine: Magazine; numbered
   );
 }
 
+function MagazineStory({ magazine, showBooks = true, showHook = true }: { magazine: Magazine; showBooks?: boolean; showHook?: boolean }) {
+  return (
+    <>
+      {showHook ? (
+        <View style={styles.hookBox}>
+          <Text style={styles.hookLabel}>3초 만에 읽고 싶어지는 이유</Text>
+          <Text style={styles.hookText}>{magazine.hook}</Text>
+        </View>
+      ) : null}
+
+      {magazine.sections.map((section, index) => (
+        <View key={`${section.kicker}-${index}`} style={styles.storySection}>
+          <Text style={styles.sectionKicker}>{section.kicker}</Text>
+          <Text style={styles.storyTitle}>{section.title}</Text>
+          <Text style={styles.paragraph}>{section.body}</Text>
+        </View>
+      ))}
+
+      {magazine.longRead ? (
+        <View style={styles.longRead}>
+          <View style={styles.longReadRule} />
+          <Text style={styles.longReadEyebrow}>{magazine.longRead.eyebrow}</Text>
+          <Text style={styles.longReadTitle}>{magazine.longRead.title}</Text>
+          <Text style={styles.longReadIntro}>{magazine.longRead.intro}</Text>
+          <View style={styles.longReadMeta}>
+            <Ionicons name="book-outline" size={14} color="#756B61" />
+            <Text style={styles.longReadMetaText}>스포일러 없이 읽는 프리뷰</Text>
+          </View>
+          {magazine.longRead.paragraphs.map((paragraph, index) => (
+            <View key={`${magazine.id}-long-${index}`}>
+              <Text style={[styles.longReadParagraph, index === 0 && styles.longReadFirstParagraph]}>{paragraph}</Text>
+              {index === Math.floor(magazine.longRead!.paragraphs.length / 2) - 1 ? (
+                <View style={styles.interludeBox}>
+                  <Text style={styles.interludeMark}>“</Text>
+                  <Text style={styles.interludeText}>{magazine.longRead!.interlude}</Text>
+                </View>
+              ) : null}
+            </View>
+          ))}
+          <View style={styles.closingQuestionBox}>
+            <Text style={styles.closingQuestionLabel}>책을 펴기 전에, 나에게 묻기</Text>
+            <Text style={styles.closingQuestion}>{magazine.longRead.closingQuestion}</Text>
+          </View>
+        </View>
+      ) : null}
+
+      <View style={styles.debateBox}>
+        <View style={styles.debateTop}>
+          <Ionicons name="chatbubbles-outline" size={17} color="#D8FF45" />
+          <Text style={styles.debateLabel}>친구랑 이 얘기 해볼래?</Text>
+        </View>
+        <Text style={styles.debateQuestion}>{magazine.debate.question}</Text>
+        <Text style={styles.debateContext}>{magazine.debate.context}</Text>
+        <View style={styles.choiceRow}>
+          {magazine.debate.choices.map((choice, index) => (
+            <View key={choice} style={styles.choicePill}>
+              <Text style={styles.choiceNumber}>{index + 1}</Text>
+              <Text style={styles.choiceText}>{choice}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+
+      {magazine.facts.length ? (
+        <View style={styles.factBox}>
+          <Text style={styles.factHeading}>알고 읽으면 완전히 달라지는 사실</Text>
+          {magazine.facts.map((fact) => (
+            <View key={fact.label} style={styles.factRow}>
+              <Text style={styles.factLabel}>{fact.label}</Text>
+              <Text style={styles.factText}>{fact.text}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {magazine.playlist.length ? (
+        <View style={styles.sectionHeading}>
+          <Text style={styles.sectionKicker}>BOOK PLAYLIST</Text>
+          <Text style={styles.sectionTitle}>이 책과 함께 들을 음악</Text>
+          <View style={styles.playlist}>
+            {magazine.playlist.map((track, index) => (
+              <View key={`${track.title}-${track.artist}`} style={styles.trackRow}>
+                <View style={styles.trackNumber}><Text style={styles.trackNumberText}>{String(index + 1).padStart(2, '0')}</Text></View>
+                <View style={styles.trackCopy}>
+                  <Text style={styles.trackTitle}>{track.title}</Text>
+                  <Text style={styles.trackArtist}>{track.artist}</Text>
+                  <Text style={styles.trackReason}>{track.reason}</Text>
+                </View>
+                <Ionicons name="musical-notes-outline" size={20} color="#776E64" />
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
+
+      {showBooks ? (
+        <>
+          <View style={styles.sectionHeading}>
+            <Text style={styles.sectionKicker}>READ NEXT</Text>
+            <Text style={styles.sectionTitle}>관심이 생겼다면, 이 책부터</Text>
+          </View>
+          <BookList magazine={magazine} />
+        </>
+      ) : null}
+
+      <View style={styles.editorNote}>
+        <Text style={styles.editorNoteLabel}>EDITOR’S NOTE</Text>
+        <Text style={styles.editorNoteText}>{magazine.editorNote}</Text>
+      </View>
+
+      <View style={styles.sources}>
+        <Text style={styles.sourcesTitle}>FACT CHECK · 참고 자료</Text>
+        {magazine.sources.map((item) => (
+          <Pressable
+            key={item.url}
+            accessibilityRole="link"
+            onPress={() => void Linking.openURL(item.url)}
+            style={({ pressed }) => [styles.sourceRow, pressed && { opacity: 0.6 }]}
+          >
+            <View style={styles.sourceCopy}>
+              <Text style={styles.sourceLabel}>{item.label}</Text>
+              <Text style={styles.sourcePublisher}>{item.publisher}</Text>
+            </View>
+            <Ionicons name="open-outline" size={16} color="#756B61" />
+          </Pressable>
+        ))}
+      </View>
+    </>
+  );
+}
+
 function EditorialArticle({ magazine }: { magazine: Magazine }) {
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.articleContent}>
@@ -57,25 +188,14 @@ function EditorialArticle({ magazine }: { magazine: Magazine }) {
 
       <View style={styles.body}>
         <Text style={styles.articleTitle}>{magazine.title.replaceAll('\n', ' ')}</Text>
-        <Text style={styles.meta}>{magazine.books.length + 6}장  ·  {magazine.readTime}  ·  {magazine.date}</Text>
+        <Text style={styles.meta}>{magazine.byline}  ·  {magazine.date}</Text>
         <Text style={styles.lead}>{magazine.description}</Text>
-        <Text style={styles.paragraph}>
-          세계문학전집 앞에서 망설여진다면 가장 유명한 책보다 지금의 나와 가까운 질문을 고르는 것이 좋습니다. 짧은 소설로 호흡을 익히고, 다음 책으로 자연스럽게 넘어가 보세요.
-        </Text>
 
         <View style={styles.tags}>
           {magazine.tags.map((tag) => <Text key={tag} style={styles.tag}>{tag}</Text>)}
         </View>
 
-        <View style={styles.sectionHeading}>
-          <Text style={styles.sectionKicker}>READ NEXT</Text>
-          <Text style={styles.sectionTitle}>이 순서로 읽어보세요</Text>
-        </View>
-        <BookList magazine={magazine} />
-        <View style={styles.editorNote}>
-          <Text style={styles.editorNoteLabel}>EDITOR’S NOTE</Text>
-          <Text style={styles.editorNoteText}>좋은 입문은 모든 것을 이해하는 읽기가 아니라, 다음 페이지가 궁금해지는 읽기예요.</Text>
-        </View>
+        <MagazineStory magazine={magazine} />
       </View>
     </ScrollView>
   );
@@ -111,8 +231,8 @@ function ReadingOrderArticle({ magazine }: { magazine: Magazine }) {
 
       <View style={styles.body}>
         <View style={styles.whyBox}>
-          <Text style={styles.whyTitle}>왜 이 6권인가요?</Text>
-          <Text style={styles.whyText}>여름의 열기를 배경으로 자아, 자유, 부조리를 다른 고전을 골랐어요. 어두운 책이지만 마지막에는 자신의 삶을 다시 보게 합니다.</Text>
+          <Text style={styles.whyTitle}>왜 이 책들인가요?</Text>
+          <Text style={styles.whyText}>{magazine.hook}</Text>
         </View>
 
         <View style={styles.sectionHeading}>
@@ -120,6 +240,8 @@ function ReadingOrderArticle({ magazine }: { magazine: Magazine }) {
           <Text style={styles.sectionTitle}>이번 달의 읽기 순서</Text>
         </View>
         <BookList magazine={magazine} numbered />
+
+        <MagazineStory magazine={magazine} showBooks={false} showHook={false} />
 
         <Pressable
           accessibilityRole="button"
@@ -182,11 +304,53 @@ const styles = StyleSheet.create({
   meta: { color: '#877F76', fontSize: 11, fontWeight: '700', marginTop: 11 },
   lead: { color: '#34271F', fontSize: 18, lineHeight: 28, fontWeight: '800', marginTop: 29 },
   paragraph: { color: '#5B524A', fontSize: 14, lineHeight: 25, marginTop: 18 },
+  hookBox: { marginTop: 28, paddingVertical: 21, paddingHorizontal: 18, borderLeftWidth: 4, borderLeftColor: '#D8FF45', backgroundColor: '#34271F' },
+  hookLabel: { color: '#D8FF45', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+  hookText: { color: '#FFFFFF', fontSize: 18, lineHeight: 27, fontWeight: '800', letterSpacing: -0.35, marginTop: 9 },
+  storySection: { marginTop: 36 },
+  storyTitle: { color: '#34271F', fontSize: 22, lineHeight: 29, fontWeight: '900', letterSpacing: -0.7, marginTop: 7 },
+  longRead: { marginTop: 48 },
+  longReadRule: { width: 44, height: 4, backgroundColor: '#34271F', marginBottom: 16 },
+  longReadEyebrow: { color: '#8A7E72', fontSize: 10, fontWeight: '900', letterSpacing: 1.2 },
+  longReadTitle: { color: '#34271F', fontSize: 29, lineHeight: 38, fontWeight: '900', letterSpacing: -1, marginTop: 10 },
+  longReadIntro: { color: '#4C433B', fontSize: 16, lineHeight: 27, fontWeight: '700', marginTop: 19 },
+  longReadMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 15, marginBottom: 11 },
+  longReadMetaText: { color: '#756B61', fontSize: 10, fontWeight: '700' },
+  longReadParagraph: { color: '#4D453D', fontSize: 15, lineHeight: 28, letterSpacing: -0.15, marginTop: 20 },
+  longReadFirstParagraph: { fontSize: 16, lineHeight: 29, color: '#34271F' },
+  interludeBox: { marginVertical: 32, paddingVertical: 22, paddingHorizontal: 18, borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#B8AFA2' },
+  interludeMark: { color: '#9BAF35', fontSize: 42, lineHeight: 35, fontWeight: '900' },
+  interludeText: { color: '#34271F', fontSize: 20, lineHeight: 30, fontWeight: '900', letterSpacing: -0.6, marginTop: 3 },
+  closingQuestionBox: { marginTop: 33, padding: 20, backgroundColor: '#E8E3D8' },
+  closingQuestionLabel: { color: '#81766A', fontSize: 10, fontWeight: '900', letterSpacing: 0.7 },
+  closingQuestion: { color: '#34271F', fontSize: 18, lineHeight: 27, fontWeight: '900', marginTop: 9 },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 7, marginTop: 24 },
   tag: { color: '#594F46', fontSize: 11, fontWeight: '700', paddingHorizontal: 11, paddingVertical: 7, borderRadius: 20, backgroundColor: '#ECE9D9' },
   sectionHeading: { marginTop: 38, marginBottom: 14 },
   sectionKicker: { color: '#7C7268', fontSize: 10, fontWeight: '900', letterSpacing: 1.1 },
   sectionTitle: { color: '#34271F', fontSize: 23, fontWeight: '900', letterSpacing: -0.7, marginTop: 7 },
+  debateBox: { marginTop: 39, padding: 20, backgroundColor: '#34271F' },
+  debateTop: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  debateLabel: { color: '#D8FF45', fontSize: 11, fontWeight: '900' },
+  debateQuestion: { color: '#FFFFFF', fontSize: 21, lineHeight: 29, fontWeight: '900', letterSpacing: -0.5, marginTop: 14 },
+  debateContext: { color: '#D8D2CA', fontSize: 12, lineHeight: 20, marginTop: 10 },
+  choiceRow: { gap: 8, marginTop: 17 },
+  choicePill: { minHeight: 43, flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: 12, paddingVertical: 9, borderWidth: 1, borderColor: '#766E65' },
+  choiceNumber: { width: 21, height: 21, borderRadius: 11, textAlign: 'center', textAlignVertical: 'center', color: '#34271F', backgroundColor: '#D8FF45', fontSize: 11, fontWeight: '900' },
+  choiceText: { flex: 1, color: '#FFFFFF', fontSize: 12, lineHeight: 18, fontWeight: '700' },
+  factBox: { marginTop: 28, padding: 18, borderWidth: 1, borderColor: '#B9B2A6', backgroundColor: '#EEEBDD' },
+  factHeading: { color: '#34271F', fontSize: 16, fontWeight: '900', marginBottom: 13 },
+  factRow: { gap: 7 },
+  factLabel: { alignSelf: 'flex-start', color: '#34271F', backgroundColor: '#D8FF45', paddingHorizontal: 8, paddingVertical: 4, fontSize: 10, fontWeight: '900' },
+  factText: { color: '#554C44', fontSize: 13, lineHeight: 21 },
+  playlist: { marginTop: 14, borderTopWidth: 1, borderTopColor: '#D9D4C7' },
+  trackRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 15, borderBottomWidth: 1, borderBottomColor: '#D9D4C7' },
+  trackNumber: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center', borderRadius: 17, backgroundColor: '#D8FF45' },
+  trackNumberText: { color: '#34271F', fontSize: 10, fontWeight: '900' },
+  trackCopy: { flex: 1 },
+  trackTitle: { color: '#34271F', fontSize: 14, fontWeight: '900' },
+  trackArtist: { color: '#786F66', fontSize: 11, marginTop: 2 },
+  trackReason: { color: '#5B524A', fontSize: 11, lineHeight: 17, marginTop: 6 },
   bookList: { borderTopWidth: 1, borderTopColor: '#D9D4C7' },
   bookRow: { minHeight: 126, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#D9D4C7' },
   bookNumber: { width: 22, color: '#91A927', fontSize: 13, fontWeight: '900' },
@@ -198,6 +362,12 @@ const styles = StyleSheet.create({
   editorNote: { marginTop: 32, padding: 19, backgroundColor: '#34271F' },
   editorNoteLabel: { color: '#D8FF45', fontSize: 10, fontWeight: '900', letterSpacing: 1 },
   editorNoteText: { color: '#F7F6E9', fontSize: 13, lineHeight: 21, marginTop: 9 },
+  sources: { marginTop: 28, marginBottom: 12 },
+  sourcesTitle: { color: '#81786E', fontSize: 10, fontWeight: '900', letterSpacing: 0.8, marginBottom: 8 },
+  sourceRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: '#D9D4C7', paddingVertical: 9 },
+  sourceCopy: { flex: 1 },
+  sourceLabel: { color: '#4B433B', fontSize: 12, fontWeight: '800' },
+  sourcePublisher: { color: '#8A8178', fontSize: 10, marginTop: 3 },
   readingHero: { minHeight: 535, overflow: 'hidden' },
   aiStamp: { alignSelf: 'flex-start', flexDirection: 'row', gap: 5, alignItems: 'center', marginTop: 14, marginLeft: 21 },
   aiStampText: { color: '#34271F', fontSize: 9, fontWeight: '900', letterSpacing: 0.8 },

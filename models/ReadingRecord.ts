@@ -5,6 +5,7 @@ export type ReadingRecord = {
   bookId: string;
   userId: string;
   status: ReadingStatus;
+  totalPages?: number;
   currentPage: number;
   startedAt: string;
   finishedAt?: string;

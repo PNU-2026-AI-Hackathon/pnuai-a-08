@@ -9,7 +9,7 @@ import { MagazineGridCard } from '@/components/MagazineGridCard';
 import { magazineCategories, magazines } from '@/data/magazines';
 import { MagazineCategory } from '@/models/Magazine';
 
-const cardHeights = [286, 174, 202, 250, 220, 244, 186, 206, 250, 218, 278, 230, 205, 245, 208, 258];
+const cardHeights = [292, 280, 250, 286, 174, 202, 250, 220, 244, 186, 206, 250, 218, 278, 230, 205, 245, 208, 258];
 
 export default function ExploreMagazineScreen() {
   const { width } = useWindowDimensions();
@@ -21,7 +21,20 @@ export default function ExploreMagazineScreen() {
     const keyword = query.trim().toLocaleLowerCase('ko');
     return magazines.filter((magazine) => {
       const categoryMatches = category === '전체' || magazine.category === category;
-      const keywordMatches = !keyword || `${magazine.title} ${magazine.description} ${magazine.category}`
+      const searchable = [
+        magazine.title,
+        magazine.description,
+        magazine.hook,
+        magazine.category,
+        ...magazine.tags,
+        ...magazine.books.flatMap((book) => [book.title, book.author]),
+        ...magazine.sections.flatMap((section) => [section.title, section.body]),
+        magazine.longRead?.title ?? '',
+        ...(magazine.longRead?.paragraphs ?? []),
+        magazine.debate.question,
+        ...magazine.playlist.flatMap((track) => [track.title, track.artist]),
+      ].join(' ');
+      const keywordMatches = !keyword || searchable
         .toLocaleLowerCase('ko').includes(keyword);
       return categoryMatches && keywordMatches;
     });

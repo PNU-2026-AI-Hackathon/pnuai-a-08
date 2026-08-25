@@ -55,11 +55,11 @@ function BookCard({ book, width, onPress }: { book: Book; width: number; onPress
   );
 }
 
-function AddBookCard({ onPress }: { onPress: () => void }) {
+function AddBookCard({ onPress, accessibilityLabel }: { onPress: () => void; accessibilityLabel: string }) {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel="나의 책 추가하기"
+      accessibilityLabel={accessibilityLabel}
       onPress={onPress}
       style={({ pressed }) => [styles.addCard, pressed && styles.pressed]}
     >
@@ -74,7 +74,7 @@ export function BookShelf({ books, variant, onPressBook, onPressAdd }: BookShelf
   const shelfWidth = Math.max(541, screenWidth * 1.34);
   const items: ShelfItem[] = [
     ...books.map((book) => ({ type: 'book' as const, book })),
-    ...(variant === 'owned' && onPressAdd ? [{ type: 'add' as const, id: 'add-book' as const }] : []),
+    ...(onPressAdd ? [{ type: 'add' as const, id: 'add-book' as const }] : []),
   ];
 
   return (
@@ -94,7 +94,10 @@ export function BookShelf({ books, variant, onPressBook, onPressAdd }: BookShelf
             onPress={onPressBook ? () => onPressBook(item.book) : undefined}
           />
         ) : (
-          <AddBookCard onPress={onPressAdd ?? (() => undefined)} />
+          <AddBookCard
+            onPress={onPressAdd ?? (() => undefined)}
+            accessibilityLabel={variant === 'borrowed' ? '빌릴 책 둘러보기' : '나의 책 추가하기'}
+          />
         )}
       />
       <View
