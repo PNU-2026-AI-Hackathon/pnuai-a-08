@@ -113,9 +113,12 @@ class FirestoreChatRepository implements ChatRepository {
   private async mapRoom(snapshot: Parameters<typeof mapChatRoom>[0], userId: string) {
     const data = snapshot.data() ?? {};
     const otherUserId = (data.participantIds as string[] | undefined)?.find((id) => id !== userId);
-    const [otherUser, loanRequest, memberSettings, block] = await Promise.all([
+    const [otherUser, loanRequest, book, memberSettings, block] = await Promise.all([
       otherUserId ? getDoc(doc(db, 'users', otherUserId)) : Promise.resolve(null),
       data.requestId ? getDoc(doc(db, 'loanRequests', data.requestId)) : Promise.resolve(null),
+      typeof data.bookId === 'string' && data.bookId
+        ? getDoc(doc(db, 'books', data.bookId))
+        : Promise.resolve(null),
       getDoc(this.memberSettingsReference(snapshot.id, userId)),
       otherUserId ? getDoc(this.blockReference(userId, otherUserId)) : Promise.resolve(null),
     ]);
@@ -130,6 +133,12 @@ class FirestoreChatRepository implements ChatRepository {
       notificationsMuted: memberData?.notificationsMuted === true,
       hasBlockedOtherUser: block?.exists() === true,
     });
+    if (book?.exists()) {
+      const bookData = book.data();
+      if (typeof bookData.coverUrl === 'string' && bookData.coverUrl) {
+        room.book.coverUrl = bookData.coverUrl;
+      }
+    }
     const place = loanRequest?.exists() ? loanRequest.data().lendingPlace : undefined;
     if (place && typeof place === 'object') {
       room.lendingPlace = {

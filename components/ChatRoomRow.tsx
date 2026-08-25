@@ -1,5 +1,5 @@
 import { LinearGradient } from 'expo-linear-gradient';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors, radius, spacing, typography } from '@/constants/theme';
 import { ChatRoom, ChatRoomStatus } from '@/models/ChatRoom';
@@ -46,11 +46,15 @@ export function ChatRoomRow({ room, onPress }: ChatRoomRowProps) {
       onPress={() => onPress(room)}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
-      <LinearGradient colors={[...room.book.colors]} style={styles.cover}>
-        <Text numberOfLines={2} style={styles.coverTitle}>
-          {room.book.title}
-        </Text>
-      </LinearGradient>
+      {room.book.coverUrl ? (
+        <Image source={{ uri: room.book.coverUrl }} resizeMode="cover" style={styles.cover} />
+      ) : (
+        <LinearGradient colors={[...room.book.colors]} style={styles.cover}>
+          <Text numberOfLines={2} style={styles.coverTitle}>
+            {room.book.title}
+          </Text>
+        </LinearGradient>
+      )}
 
       <View style={styles.body}>
         <View style={styles.titleRow}>
