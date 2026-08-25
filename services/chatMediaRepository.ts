@@ -1,7 +1,9 @@
-import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { doc, getDoc } from 'firebase/firestore';
+import { deleteObject, ref } from 'firebase/storage';
 
-import { storage } from '@/lib/firebase';
+import { auth, db, storage } from '@/lib/firebase';
 import { chatRepository } from '@/services/chatRepository';
+import { imageExtension, uploadLocalImage } from '@/services/localImageStorageRepository';
 
 const MAX_CHAT_IMAGE_BYTES = 10 * 1024 * 1024;
 
@@ -16,15 +18,28 @@ export type SendChatImageInput = {
   height?: number;
 };
 
-function imageExtension(fileName: string | null | undefined, mimeType: string) {
-  const fileExtension = fileName?.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (fileExtension && fileExtension.length <= 5) return fileExtension === 'jpeg' ? 'jpg' : fileExtension;
-  const mimeExtension = mimeType.split('/')[1]?.toLowerCase().replace(/[^a-z0-9]/g, '');
-  return mimeExtension === 'jpeg' ? 'jpg' : mimeExtension || 'jpg';
-}
-
 export interface ChatMediaRepository {
   sendImage(input: SendChatImageInput): Promise<string>;
+}
+
+async function getChatUploadDiagnostics(roomId: string, senderId: string) {
+  const currentAuthUid = auth.currentUser?.uid ?? null;
+  const roomSnapshot = await getDoc(doc(db, 'chatRooms', roomId));
+  const roomData = roomSnapshot.exists() ? roomSnapshot.data() : null;
+  const participantIds = Array.isArray(roomData?.participantIds)
+    ? roomData.participantIds.filter((id): id is string => typeof id === 'string')
+    : [];
+
+  return {
+    roomId,
+    senderId,
+    currentAuthUid,
+    roomExists: roomSnapshot.exists(),
+    participantIds,
+    senderMatchesAuth: currentAuthUid === senderId,
+    senderInParticipants: participantIds.includes(senderId),
+    authInParticipants: currentAuthUid ? participantIds.includes(currentAuthUid) : false,
+  };
 }
 
 class FirebaseChatMediaRepository implements ChatMediaRepository {
@@ -35,42 +50,58 @@ class FirebaseChatMediaRepository implements ChatMediaRepository {
       throw new Error('CHAT_IMAGE_TOO_LARGE');
     }
 
-    const response = await fetch(input.localUri);
-    if (!response.ok) throw new Error('CHAT_IMAGE_READ_FAILED');
-    const blob = await response.blob();
-    const contentType = input.mimeType?.trim() || blob.type || 'image/jpeg';
-    if (!contentType.startsWith('image/')) throw new Error('CHAT_IMAGE_TYPE_INVALID');
-    if (blob.size > MAX_CHAT_IMAGE_BYTES) throw new Error('CHAT_IMAGE_TOO_LARGE');
-
+    const contentType = input.mimeType?.trim() || 'image/jpeg';
     const extension = imageExtension(input.fileName, contentType);
     const storagePath = `chat-media/${input.roomId}/${input.senderId}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${extension}`;
-    const storageReference = ref(storage, storagePath);
-    let uploaded = false;
+    let uploadedStoragePath: string | null = null;
+    let diagnostics: Awaited<ReturnType<typeof getChatUploadDiagnostics>> | null = null;
 
     try {
-      await uploadBytes(storageReference, blob, {
-        contentType,
-        customMetadata: { roomId: input.roomId, senderId: input.senderId },
-      });
-      uploaded = true;
-      const downloadUrl = await getDownloadURL(storageReference);
-      return await chatRepository.sendImageMessage(input.roomId, input.senderId, {
-        downloadUrl,
+      diagnostics = await getChatUploadDiagnostics(input.roomId, input.senderId);
+      console.log('Chat image upload diagnostics:', {
+        ...diagnostics,
         storagePath,
-        mimeType: contentType,
+        contentType,
+        fileSize: input.fileSize,
+      });
+      const uploaded = await uploadLocalImage({
+        localUri: input.localUri,
+        storagePath,
+        contentType,
+        maxBytes: MAX_CHAT_IMAGE_BYTES,
+        customMetadata: { roomId: input.roomId, senderId: input.senderId },
+        logLabel: 'Chat image',
+      });
+      uploadedStoragePath = uploaded.storagePath;
+      return await chatRepository.sendImageMessage(input.roomId, input.senderId, {
+        downloadUrl: uploaded.url,
+        storagePath: uploaded.storagePath,
+        mimeType: uploaded.contentType,
         ...(typeof input.width === 'number' ? { width: input.width } : {}),
         ...(typeof input.height === 'number' ? { height: input.height } : {}),
-        byteSize: blob.size,
+        byteSize: uploaded.byteSize,
       });
     } catch (error) {
-      if (uploaded) {
-        await deleteObject(storageReference).catch((cleanupError) => {
+      if (uploadedStoragePath) {
+        await deleteObject(ref(storage, uploadedStoragePath)).catch((cleanupError) => {
           console.error('전송 실패 이미지 정리 실패:', cleanupError);
         });
       }
+      const errorMessage = error instanceof Error ? error.message : '';
+      const firebaseError = error as { code?: string; message?: string };
+      if (firebaseError.code === 'storage/unauthorized') {
+        console.error('Chat image upload unauthorized diagnostics:', {
+          ...diagnostics,
+          storagePath,
+          contentType,
+          firebaseCode: firebaseError.code,
+          firebaseMessage: firebaseError.message,
+        });
+      }
+      if (errorMessage === 'IMAGE_FILE_READ_FAILED') throw new Error('CHAT_IMAGE_READ_FAILED');
+      if (errorMessage === 'IMAGE_TYPE_INVALID') throw new Error('CHAT_IMAGE_TYPE_INVALID');
+      if (errorMessage === 'IMAGE_TOO_LARGE') throw new Error('CHAT_IMAGE_TOO_LARGE');
       throw error;
-    } finally {
-      (blob as Blob & { close?: () => void }).close?.();
     }
   }
 }

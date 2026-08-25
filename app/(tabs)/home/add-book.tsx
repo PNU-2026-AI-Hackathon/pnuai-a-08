@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useAuth } from '@/auth/AuthProvider';
@@ -15,6 +15,7 @@ import { GoogleBookCandidate, googleBooksRepository } from '@/services/googleBoo
 
 type CalendarTarget = 'published' | 'started' | 'finished';
 type CoverSource = 'google' | 'local';
+type ImageImportSource = 'camera' | 'library';
 const weekDays = ['일', '월', '화', '수', '목', '금', '토'];
 
 function parseDate(value?: string) {
@@ -134,6 +135,7 @@ export default function AddBookScreen() {
   const [bookSearchAttempted, setBookSearchAttempted] = useState(false);
   const [calendarTarget, setCalendarTarget] = useState<CalendarTarget | null>(null);
   const [saving, setSaving] = useState(false);
+  const [imageSourceOpen, setImageSourceOpen] = useState(false);
   const formWidth = Math.min(329, width - 48);
   const isEditing = Boolean(bookId);
 
@@ -212,11 +214,8 @@ export default function AddBookScreen() {
     setBookSearchAttempted(false);
   };
 
-  const pickImageAndImport = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
-    if (result.canceled || !result.assets[0]) return;
-
-    const uri = result.assets[0].uri;
+  const importImageAsset = async (asset: ImagePicker.ImagePickerAsset) => {
+    const uri = asset.uri;
     setCoverLocalUri(uri);
     if (!selectedBookInfo?.coverUrl) setCoverSource('local');
     setImportLoading(true);
@@ -237,6 +236,43 @@ export default function AddBookScreen() {
     } finally {
       setImportLoading(false);
     }
+  };
+
+  const pickImageAndImport = async (source: ImageImportSource) => {
+    const permission = source === 'camera'
+      ? await ImagePicker.requestCameraPermissionsAsync()
+      : await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (!permission.granted) {
+      Alert.alert(
+        source === 'camera' ? '카메라 권한이 필요해요' : '사진 접근 권한이 필요해요',
+        source === 'camera'
+          ? '책 표지를 촬영하려면 카메라 권한을 허용해주세요.'
+          : '책 표지 사진을 선택하려면 사진 접근 권한을 허용해주세요.',
+        permission.canAskAgain
+          ? [{ text: '확인' }]
+          : [
+              { text: '취소', style: 'cancel' },
+              { text: '설정 열기', onPress: () => void Linking.openSettings() },
+            ],
+      );
+      return;
+    }
+
+    const result = source === 'camera'
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.85 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
+    if (result.canceled || !result.assets[0]) return;
+    await importImageAsset(result.assets[0]);
+  };
+
+  const chooseImageImportSource = () => {
+    setImageSourceOpen(true);
+  };
+
+  const startImageImport = (source: ImageImportSource) => {
+    setImageSourceOpen(false);
+    void pickImageAndImport(source);
   };
 
   const saveBook = async () => {
@@ -318,7 +354,7 @@ export default function AddBookScreen() {
           <Image source={require('../../../assets/images/rental-symbol.png')} style={styles.symbol} resizeMode="contain" />
 
           {!isEditing ? (
-            <Pressable disabled={importLoading} onPress={() => void pickImageAndImport()} style={({ pressed }) => [styles.coverPicker, { width: formWidth }, (pressed || importLoading) && styles.pressed]}>
+            <Pressable disabled={importLoading} onPress={chooseImageImportSource} style={({ pressed }) => [styles.coverPicker, { width: formWidth }, (pressed || importLoading) && styles.pressed]}>
               {coverLocalUri ? (
                 <Image source={{ uri: coverLocalUri }} style={styles.coverPreview} resizeMode="cover" />
               ) : (
@@ -438,6 +474,32 @@ export default function AddBookScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <Modal
+        visible={imageSourceOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setImageSourceOpen(false)}
+      >
+        <Pressable style={styles.sheetBackdrop} onPress={() => setImageSourceOpen(false)}>
+          <Pressable style={styles.imageSourceSheet} onPress={(event) => event.stopPropagation()}>
+            <Text style={styles.sheetTitle}>책 표지 사진</Text>
+            <Text style={styles.sheetDescription}>사진을 어떻게 가져올까요?</Text>
+            <View style={styles.sheetActions}>
+              <Pressable onPress={() => startImageImport('camera')} style={styles.sheetAction}>
+                <Ionicons name="camera-outline" size={22} color="#5D442D" />
+                <Text style={styles.sheetActionText}>카메라로 찍기</Text>
+              </Pressable>
+              <Pressable onPress={() => startImageImport('library')} style={styles.sheetAction}>
+                <Ionicons name="images-outline" size={22} color="#5D442D" />
+                <Text style={styles.sheetActionText}>갤러리에서 선택</Text>
+              </Pressable>
+            </View>
+            <Pressable onPress={() => setImageSourceOpen(false)} style={styles.sheetCancel}>
+              <Text style={styles.sheetCancelText}>취소</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -452,6 +514,15 @@ const styles = StyleSheet.create({
   coverPicker: { height: 171, marginTop: 28, borderWidth: 1, borderStyle: 'dashed', borderColor: '#A2B155', borderRadius: 16, backgroundColor: '#FFFCF5', alignItems: 'center', justifyContent: 'center', gap: 8, overflow: 'hidden', shadowColor: '#5D442D', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 2 },
   coverPickerText: { color: '#5D442D', fontSize: 14, fontWeight: '800' }, coverPickerPending: { color: '#85818A', fontSize: 11 },
   coverPreview: { width: 92, height: 132, alignSelf: 'center', marginTop: 12, borderRadius: 8, backgroundColor: '#F4F0E8' },
+  sheetBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.28)' },
+  imageSourceSheet: { margin: 16, borderRadius: 18, padding: 18, backgroundColor: '#FFFDF8', shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 18, elevation: 10 },
+  sheetTitle: { color: '#151310', fontSize: 16, fontWeight: '900' },
+  sheetDescription: { marginTop: 5, color: '#77716B', fontSize: 12 },
+  sheetActions: { marginTop: 16, gap: 10 },
+  sheetAction: { height: 48, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, backgroundColor: '#F4F1E8' },
+  sheetActionText: { color: '#3B3028', fontSize: 14, fontWeight: '800' },
+  sheetCancel: { height: 42, marginTop: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E9E5DD' },
+  sheetCancelText: { color: '#665D55', fontSize: 13, fontWeight: '800' },
   loadInfoButton: { minHeight: 40, marginTop: 12, borderWidth: 1.5, borderColor: '#A2B155', borderRadius: 12, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, backgroundColor: '#FFFFFF' },
   coverMiniButton: { minHeight: 38, marginTop: 8, borderRadius: 11, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14, backgroundColor: '#F7F5EB' },
   loadInfoText: { color: '#6E7A30', fontSize: 13, fontWeight: '800' },
