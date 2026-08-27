@@ -1,0 +1,30 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+.expo/
+.expo-export-check/
+dist/
+web-build/
+android/
+ios/
+
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+.DS_Store
+npm-debug.log*
+firebase-debug.log*
+
+# IDE
+.idea/
+
+# @generated expo-cli sync-2b81b286409207a5da26e14c78851eb30d8ccbdb
+expo-env.d.ts
+# @end expo-cli
+
+seoroseoga_3_activities/docs/gemini_key.txt

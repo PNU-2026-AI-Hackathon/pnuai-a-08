@@ -1,0 +1,32 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isChatParticipant(roomId) {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/chatRooms/$(roomId))
+        && request.auth.uid in firestore.get(
+          /databases/(default)/documents/chatRooms/$(roomId)
+        ).data.participantIds;
+    }
+
+    match /book-covers/{userId}/{fileName} {
+      allow read: if true;
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /chat-media/{roomId}/{userId}/{fileName} {
+      allow read: if isChatParticipant(roomId);
+      allow create: if isChatParticipant(roomId)
+        && request.auth.uid == userId
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow update: if false;
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
