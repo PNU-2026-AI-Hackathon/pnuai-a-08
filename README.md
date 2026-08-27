@@ -1,7 +1,7 @@
 # 서로서가 (SeoroSeoga)
 
 <p align="center">
-  <img src="./pictures/다운로드.jpeg" alt="서로서가" width="820" />
+  <img src="./pictures/다운로드.jpeg" alt="서로서가" width="1000" />
 </p>
 
 > **캠퍼스 책 나눔과 AI 가이드로 독서를 더 가까이**  
