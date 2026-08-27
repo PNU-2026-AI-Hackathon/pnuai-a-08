@@ -1,0 +1,74 @@
+{
+  "project_info": {
+    "project_number": "1086812401666",
+    "project_id": "seoroseoga",
+    "storage_bucket": "seoroseoga.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1086812401666:android:81f65f76a41c1c387cb71b",
+        "android_client_info": {
+          "package_name": "com.example.seoroseoga"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1086812401666-t4qo6qpjjudgj3j9lo45glhcehnk47ke.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDPe6MZh2cM1XWhEY-HHOuyLTADtl7P72g"
+        },
+        {
+          "current_key": "AIzaSyC-1-H44_QKT65TNJuANe9IXfknK6PmSwU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1086812401666-t4qo6qpjjudgj3j9lo45glhcehnk47ke.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1086812401666:android:01e912799f58b1037cb71b",
+        "android_client_info": {
+          "package_name": "com.seoroseoga.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1086812401666-t4qo6qpjjudgj3j9lo45glhcehnk47ke.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDPe6MZh2cM1XWhEY-HHOuyLTADtl7P72g"
+        },
+        {
+          "current_key": "AIzaSyC-1-H44_QKT65TNJuANe9IXfknK6PmSwU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1086812401666-t4qo6qpjjudgj3j9lo45glhcehnk47ke.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

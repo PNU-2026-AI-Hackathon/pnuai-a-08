@@ -1,0 +1,65 @@
+{
+  "expo": {
+    "name": "서로서가",
+    "slug": "seoroseoga",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "seoroseoga",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "책 표지와 채팅 사진을 선택하기 위해 사진 접근을 허용해주세요.",
+          "cameraPermission": "채팅에서 사진을 촬영하기 위해 카메라 접근을 허용해주세요.",
+          "microphonePermission": false
+        }
+      ],
+      "@react-native-google-signin/google-signin",
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ],
+      [
+        "rn-mlkit-ocr",
+        {
+          "ocrModels": [
+            "korean",
+            "latin"
+          ],
+          "ocrUseBundled": true
+        }
+      ]
+    ],
+    "android": {
+      "package": "com.seoroseoga.app",
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+        "backgroundColor": "#F7F4EE"
+      },
+      "edgeToEdgeEnabled": true
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.seoroseoga.app"
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e5b63a17-40f3-46d8-b1e1-1ae8bc54116f"
+      }
+    },
+    "owner": "seoroseoga_project"
+  }
+}

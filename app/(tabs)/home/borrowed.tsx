@@ -1,0 +1,161 @@
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
+import { useMemo } from 'react';
+import { ActivityIndicator, Image, ImageSourcePropType, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { useAuth } from '@/auth/AuthProvider';
+import { useBorrowedRentals } from '@/hooks/useBorrowedRentals';
+import { BorrowedRental } from '@/models/BorrowedRental';
+import { formatReturnDday } from '@/utils/rentalDate';
+
+const localCovers: Record<string, ImageSourcePropType> = {
+  급류: require('../../../pictures/급류.png'),
+  '네루다의 우편배달부': require('../../../pictures/네루다의 우편배달부.png'),
+  모순: require('../../../pictures/모순.png'),
+  아몬드: require('../../../pictures/아몬드.png'),
+  파과: require('../../../pictures/파과.png'),
+};
+
+function monthKey(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'undated';
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(key: string) {
+  if (key === 'undated') return '날짜 미정';
+  const [year, month] = key.split('-');
+  return `${year}년 ${Number(month)}월`;
+}
+
+function chunkItems<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) chunks.push(items.slice(index, index + size));
+  return chunks;
+}
+
+function BorrowedBook({ rental, width }: { rental: BorrowedRental; width: number }) {
+  const height = Math.round(width * 1.45);
+  const scheduled = rental.status === 'SCHEDULED';
+  const localCover = localCovers[rental.book.title];
+  const source = rental.book.coverUrl ? { uri: rental.book.coverUrl } : localCover;
+
+  const openRental = () => {
+    if (!rental.book.id) return;
+    router.push({ pathname: '/home/[bookId]', params: { bookId: rental.book.id } });
+  };
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${rental.book.title}, ${scheduled ? '대여 예정' : `대여중 ${formatReturnDday(rental.dueAt)}`}`}
+      disabled={!rental.book.id}
+      onPress={openRental}
+      style={({ pressed }) => [styles.book, { width, height }, pressed && styles.pressed]}
+    >
+      {source ? (
+        <Image source={source} resizeMode="cover" style={styles.cover} />
+      ) : (
+        <LinearGradient colors={['#E8EDCC', '#FFF8EB']} style={styles.fallbackCover}>
+          <Text numberOfLines={3} style={styles.fallbackTitle}>{rental.book.title}</Text>
+          <Text numberOfLines={1} style={styles.fallbackAuthor}>{rental.book.author}</Text>
+        </LinearGradient>
+      )}
+      <View style={styles.rentalBadge}>
+        <View style={styles.statusDot} />
+        <Text numberOfLines={1} style={styles.rentalBadgeText}>{scheduled ? '대여 예정' : `대여중 · ${formatReturnDday(rental.dueAt)}`}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+function ShelfRow({ rentals, pageWidth }: { rentals: BorrowedRental[]; pageWidth: number }) {
+  const bookWidth = Math.min(96, Math.max(76, (pageWidth - 92) / 3));
+  const gap = Math.max(12, (pageWidth - 64 - bookWidth * 3) / 2);
+  const coverHeight = Math.round(bookWidth * 1.45);
+  const shelfWidth = Math.max(480, pageWidth * 1.25);
+  const shelfHeight = shelfWidth / 1.5;
+  const shelfTop = coverHeight + 5 - shelfHeight * 0.56;
+
+  return (
+    <View style={[styles.shelfRow, { height: coverHeight + 46 }]}>
+      <View style={[styles.shelfGlow, { height: coverHeight + 17 }]} />
+      <View style={[styles.bookRow, { gap }]}>
+        {rentals.map((rental) => <BorrowedBook key={rental.id} rental={rental} width={bookWidth} />)}
+      </View>
+      <View pointerEvents="none" style={[styles.shelfImage, { width: shelfWidth, height: shelfHeight, left: (pageWidth - shelfWidth) / 2, top: shelfTop }]}>
+        <Image source={require('../../../assets/home/bookshelf.png')} resizeMode="contain" style={styles.shelfAsset} />
+      </View>
+    </View>
+  );
+}
+
+export default function BorrowedBooksScreen() {
+  const { width } = useWindowDimensions();
+  const { user } = useAuth();
+  const { rentals, isLoading, error, reload } = useBorrowedRentals(user?.uid ?? '');
+  const pageWidth = Math.min(width, 620);
+  const activeRentals = useMemo(() => rentals.filter((rental) => rental.status !== 'RETURNED'), [rentals]);
+  const groups = useMemo(() => {
+    const grouped = new Map<string, BorrowedRental[]>();
+    activeRentals.forEach((rental) => {
+      const key = monthKey(rental.startedAt);
+      grouped.set(key, [...(grouped.get(key) ?? []), rental]);
+    });
+    return [...grouped.entries()].sort(([first], [second]) => {
+      if (first === 'undated') return 1;
+      if (second === 'undated') return -1;
+      return second.localeCompare(first);
+    });
+  }, [activeRentals]);
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={['top']}>
+      <View style={[styles.page, { width: pageWidth }]}>
+        <View style={styles.header}>
+          <Pressable accessibilityRole="button" accessibilityLabel="뒤로 가기" hitSlop={12} onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="chevron-back" size={23} color="#1A1A1A" />
+          </Pressable>
+          <Text style={styles.title}>빌린 책</Text>
+          <View style={styles.backButton} />
+        </View>
+
+        {isLoading ? (
+          <View style={styles.state}><ActivityIndicator color="#A0B243" size="large" /></View>
+        ) : error ? (
+          <View style={styles.state}>
+            <Text style={styles.stateText}>{error}</Text>
+            <Pressable onPress={() => reload()} style={styles.retry}><Text style={styles.retryText}>다시 시도</Text></Pressable>
+          </View>
+        ) : activeRentals.length === 0 ? (
+          <View style={styles.state}>
+            <Ionicons name="library-outline" size={40} color="#B1B1B1" />
+            <Text style={styles.emptyTitle}>현재 빌린 책이 없어요.</Text>
+            <Pressable onPress={() => router.push('/(tabs)/rental/borrow')} style={styles.borrowButton}><Text style={styles.borrowButtonText}>책 둘러보기</Text></Pressable>
+          </View>
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+            {groups.map(([key, groupRentals]) => (
+              <View key={key} style={styles.monthGroup}>
+                <Text style={styles.monthTitle}>{monthLabel(key)}</Text>
+                {chunkItems(groupRentals, 3).map((row, index) => <ShelfRow key={`${key}-${index}`} rentals={row} pageWidth={pageWidth} />)}
+              </View>
+            ))}
+          </ScrollView>
+        )}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: '#FFFFFF' }, page: { flex: 1, alignSelf: 'center', backgroundColor: '#FFFFFF' },
+  header: { height: 58, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#8B8986', paddingHorizontal: 12 }, backButton: { width: 36, height: 42, alignItems: 'center', justifyContent: 'center' }, title: { color: '#111111', fontSize: 18, lineHeight: 24, fontWeight: '900' },
+  content: { paddingTop: 25, paddingBottom: 112 }, monthGroup: { marginBottom: 4 }, monthTitle: { color: '#111111', fontSize: 16, lineHeight: 22, fontWeight: '900', marginLeft: 35, marginBottom: 7 },
+  shelfRow: { position: 'relative', overflow: 'hidden' }, shelfGlow: { position: 'absolute', left: 4, right: -20, top: 8, backgroundColor: 'rgba(233,250,144,0.2)' }, bookRow: { position: 'absolute', zIndex: 2, left: 32, right: 32, top: 0, flexDirection: 'row', alignItems: 'flex-end' }, shelfImage: { position: 'absolute', zIndex: 3 }, shelfAsset: { width: '100%', height: '100%' },
+  book: { borderRadius: 4, backgroundColor: '#F4F0E8', shadowColor: '#000000', shadowOffset: { width: 8, height: 6 }, shadowOpacity: 0.25, shadowRadius: 10, elevation: 7 }, cover: { width: '100%', height: '100%', borderRadius: 4 }, fallbackCover: { width: '100%', height: '100%', borderRadius: 4, alignItems: 'center', justifyContent: 'flex-end', paddingHorizontal: 8, paddingBottom: 28 }, fallbackTitle: { color: '#2B2019', fontSize: 13, lineHeight: 17, fontWeight: '900', textAlign: 'center' }, fallbackAuthor: { color: '#5D442D', fontSize: 8, marginTop: 6 },
+  rentalBadge: { position: 'absolute', zIndex: 4, left: 4, right: 4, bottom: 5, height: 20, borderRadius: 10, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, paddingHorizontal: 3, backgroundColor: 'rgba(26,26,26,0.78)' }, statusDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#D6FF42' }, rentalBadgeText: { flexShrink: 1, color: 'rgba(255,255,255,0.92)', fontSize: 7.5, lineHeight: 11, fontWeight: '900' },
+  state: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 13, paddingHorizontal: 30 }, stateText: { color: '#746E69', fontSize: 13, textAlign: 'center' }, emptyTitle: { color: '#362E29', fontSize: 16, fontWeight: '800' }, retry: { paddingHorizontal: 17, paddingVertical: 8, borderRadius: 20, backgroundColor: '#E8EDCC' }, retryText: { color: '#7A8B26', fontSize: 12, fontWeight: '800' }, borrowButton: { height: 40, paddingHorizontal: 20, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#A0B243' }, borrowButtonText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' }, pressed: { opacity: 0.68, transform: [{ scale: 0.985 }] },
+});
