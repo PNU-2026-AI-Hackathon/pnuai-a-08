@@ -870,7 +870,7 @@ Firebase 설정 파일인 `google-services.json`은 프로젝트 루트에 위�
 
 대회 운영 측에 영상을 제출한 뒤 부여받은 YouTube URL을 연결합니다.
 
-- **YouTube**: `https://github.com/PNU-2026-AI-Hackathon/pnuai-a-08`
+- **YouTube**: `https://www.youtube.com/watch?v=9uO-5PCK8uc&t=4s`
 
 ## 시연에서 확인할 핵심 흐름
 
