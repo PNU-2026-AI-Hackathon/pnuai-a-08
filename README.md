@@ -731,8 +731,8 @@ Android 테스트는 native Google Sign-In과 OCR 모듈을 포함하기 위해 
 ## 4.2. 프로젝트 설치
 
 ```bash
-git clone <REPOSITORY_URL>
-cd <REPOSITORY_NAME>
+git clone  -b main --single-branch <REPOSITORY_URL>
+cd pnuai-a-08
 
 npm install
 ```
